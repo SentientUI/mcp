@@ -1,0 +1,67 @@
+{
+  "name": "@sentientui/mcp",
+  "version": "0.4.0",
+  "description": "MCP server for SentientUI — exposes project data and actions to AI agents",
+  "license": "MIT",
+  "homepage": "https://sentient-ui.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SentientUI/mcp.git"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "sentientui",
+    "sentient-ui",
+    "ai-agents",
+    "personalization",
+    "ab-testing",
+    "conversion-optimization"
+  ],
+  "type": "module",
+  "bin": {
+    "sentientui-mcp": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/lib.d.ts",
+      "import": "./dist/lib.js",
+      "require": "./dist/lib.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "AGENTS.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsx src/index.ts",
+    "prepublishOnly": "pnpm build && pnpm typecheck"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
