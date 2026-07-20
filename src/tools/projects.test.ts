@@ -5,7 +5,7 @@ import { registerProjectTools } from './projects.js';
 function makeServer() {
   const tools: Record<string, { handler: Function }> = {};
   return {
-    tool: vi.fn((name: string, _desc: unknown, _schema: unknown, handler: Function) => {
+    registerTool: vi.fn((name: string, _config: unknown, handler: Function) => {
       tools[name] = { handler };
     }),
     tools,
@@ -26,8 +26,16 @@ describe('list_projects', () => {
   });
 
   it('registers list_projects and get_project_stats tools', () => {
-    expect(server.tool).toHaveBeenCalledWith('list_projects', expect.anything(), {}, expect.any(Function));
-    expect(server.tool).toHaveBeenCalledWith('get_project_stats', expect.anything(), expect.objectContaining({ projectId: expect.anything() }), expect.any(Function));
+    expect(server.registerTool).toHaveBeenCalledWith(
+      'list_projects',
+      expect.objectContaining({ inputSchema: {} }),
+      expect.any(Function),
+    );
+    expect(server.registerTool).toHaveBeenCalledWith(
+      'get_project_stats',
+      expect.objectContaining({ inputSchema: expect.objectContaining({ projectId: expect.anything() }) }),
+      expect.any(Function),
+    );
   });
 
   it('list_projects returns formatted project list', async () => {

@@ -111,12 +111,28 @@ async function settled<T>(p: Promise<T>): Promise<T | null> {
 }
 
 export function registerVariantBriefTools(server: McpServer, client: ApiClient): void {
-  server.tool(
+  server.registerTool(
     'get_variant_brief',
-    'Get an insight-driven brief for creating a new CODE-NATIVE variant of a component. Returns current variant performance, audience, insights, a data-sufficiency assessment (with a best-practice fallback when there is no data yet), and step-by-step instructions for writing the variant in the customer\'s code. Use this instead of create_variant when the variant will live in the codebase.',
     {
-      projectId: projectIdSchema,
-      componentId: z.string().describe('The component ID to write a new variant for (matches <Adaptive id="...">).'),
+      title: 'Variant brief',
+      description: 'Get an insight-driven brief for creating a new CODE-NATIVE variant of a component. Returns current variant performance, audience, insights, a data-sufficiency assessment (with a best-practice fallback when there is no data yet), and step-by-step instructions for writing the variant in the customer\'s code. Use this instead of create_variant when the variant will live in the codebase.',
+      inputSchema: {
+        projectId: projectIdSchema,
+        componentId: z.string().describe('The component ID to write a new variant for (matches <Adaptive id="...">).'),
+      },
+      outputSchema: {
+        componentId: z.string(),
+        contextType: z.string().describe("The project's context type (or 'unknown')"),
+        dataState: z.enum(['sufficient', 'collecting', 'empty']).describe('Data-sufficiency assessment'),
+        existingVariantIds: z.array(z.string()).describe('Variant IDs already in use (do not reuse)'),
+        priors: z.array(z.string()).describe('Best-practice priors applied for this context type'),
+        markdown: z.string().describe('The full variant brief in Markdown'),
+      },
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async ({ projectId, componentId }) => {
       const id = encodeURIComponent(projectId);
@@ -225,7 +241,18 @@ export function registerVariantBriefTools(server: McpServer, client: ApiClient):
       lines.push('');
       lines.push('Make the change reflect the data sufficiency above: data-driven when SUFFICIENT, best-practice-led when COLLECTING or EMPTY.');
 
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      const markdown = lines.join('\n');
+      return {
+        content: [{ type: 'text' as const, text: markdown }],
+        structuredContent: {
+          componentId,
+          contextType,
+          dataState,
+          existingVariantIds,
+          priors: priorsFor(contextType),
+          markdown,
+        },
+      };
     },
   );
 }

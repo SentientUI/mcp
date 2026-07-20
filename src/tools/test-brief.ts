@@ -14,12 +14,26 @@ async function settled<T>(p: Promise<T>): Promise<T | null> {
 
 /** Register the get_test_brief tool: returns paste-ready tests for a component. */
 export function registerTestBriefTools(server: McpServer, client: ApiClient): void {
-  server.tool(
+  server.registerTool(
     'get_test_brief',
-    'Get a ready-to-paste test for a SentientUI-wrapped component, populated with the component\'s real variants and goals. This project uses @sentientui/react/testing. Use this so your tests force a specific variant/layout deterministically and never break when the optimizer serves a different version. Returns a React Testing Library example plus the URL-param recipe for E2E (Playwright/Cypress).',
     {
-      projectId: projectIdSchema,
-      componentId: z.string().describe('The component ID to write a test for (matches <Adaptive id="...">).'),
+      title: 'Test brief',
+      description: 'Get a ready-to-paste test for a SentientUI-wrapped component, populated with the component\'s real variants and goals. This project uses @sentientui/react/testing. Use this so your tests force a specific variant/layout deterministically and never break when the optimizer serves a different version. Returns a React Testing Library example plus the URL-param recipe for E2E (Playwright/Cypress).',
+      inputSchema: {
+        projectId: projectIdSchema,
+        componentId: z.string().describe('The component ID to write a test for (matches <Adaptive id="...">).'),
+      },
+      outputSchema: {
+        componentId: z.string(),
+        forcedVariantId: z.string().describe('The non-control variant the example forces'),
+        goalName: z.string().describe('The goal the example asserts fires'),
+        markdown: z.string().describe('The full test brief in Markdown'),
+      },
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     async ({ projectId, componentId }) => {
       const id = encodeURIComponent(projectId);
@@ -88,7 +102,11 @@ export function registerTestBriefTools(server: McpServer, client: ApiClient): vo
       lines.push(`await page.goto('/?sentient_variant=${componentId}:${forcedId}');`);
       lines.push('```');
 
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      const markdown = lines.join('\n');
+      return {
+        content: [{ type: 'text' as const, text: markdown }],
+        structuredContent: { componentId, forcedVariantId: forcedId, goalName, markdown },
+      };
     },
   );
 }

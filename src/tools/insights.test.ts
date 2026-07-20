@@ -9,7 +9,7 @@ import { registerLayoutTools } from './layout.js';
 function makeServer() {
   const tools: Record<string, { handler: Function }> = {};
   return {
-    tool: vi.fn((name: string, _d: unknown, _s: unknown, handler: Function) => { tools[name] = { handler }; }),
+    registerTool: vi.fn((name: string, _config: unknown, handler: Function) => { tools[name] = { handler }; }),
     tools,
   };
 }

@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 const GUIDE = `# SentientUI integration guide — the adaptive ladder
@@ -68,10 +69,24 @@ deterministic outcomes so tests never depend on what the optimizer serves.
 `;
 
 export function registerIntegrationGuideTools(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     'get_integration_guide',
-    'Get the SentientUI adaptive-ladder integration guide: setup (keyless and keyed) plus copy-pasteable examples for every rung (Style, Swap, Reorder). Use this to integrate SentientUI into a codebase.',
-    {},
-    async () => ({ content: [{ type: 'text' as const, text: GUIDE }] }),
+    {
+      title: 'Integration guide',
+      description: 'Get the SentientUI adaptive-ladder integration guide: setup (keyless and keyed) plus copy-pasteable examples for every rung (Style, Swap, Reorder). Use this to integrate SentientUI into a codebase.',
+      inputSchema: {},
+      outputSchema: {
+        guide: z.string().describe('The full integration guide in Markdown'),
+      },
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async () => ({
+      content: [{ type: 'text' as const, text: GUIDE }],
+      structuredContent: { guide: GUIDE },
+    }),
   );
 }

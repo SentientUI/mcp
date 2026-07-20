@@ -25,23 +25,39 @@ function createProjectGuidance(err: ApiError): string | null {
 }
 
 export function registerProjectTools(server: McpServer, client: ApiClient): void {
-  server.tool(
+  server.registerTool(
     'create_project',
-    'Create a NEW SentientUI project (onboarding). Returns the project id and its pk_ public key for the SDK. Requires an account login: this works when connected via OAuth (the hosted MCP URL) but NOT with a project-scoped sk_ server key or an anonymous demo token. After it succeeds, call get_integration_guide and help the user install @sentientui/react with the returned key.',
     {
-      name: z.string().min(1).describe('Human-readable project name'),
-      contextType: z
-        .enum(['saas', 'ecommerce', 'marketing', 'internal'])
-        .optional()
-        .describe('What kind of product this is; defaults to saas'),
-      framework: z
-        .enum(['next-app', 'next-pages', 'react', 'core'])
-        .optional()
-        .describe('Frontend framework, used to tailor setup; defaults to next-app'),
-      websiteUrl: z
-        .string()
-        .optional()
-        .describe("Production site origin to allow-list so the SDK's events aren't origin-blocked on day one"),
+      title: 'Create project',
+      description:
+        'Create a NEW SentientUI project (onboarding). Returns the project id and its pk_ public key for the SDK. Requires an account login: this works when connected via OAuth (the hosted MCP URL) but NOT with a project-scoped sk_ server key or an anonymous demo token. After it succeeds, call get_integration_guide and help the user install @sentientui/react with the returned key.',
+      inputSchema: {
+        name: z.string().min(1).describe('Human-readable project name'),
+        contextType: z
+          .enum(['saas', 'ecommerce', 'marketing', 'internal'])
+          .optional()
+          .describe('What kind of product this is; defaults to saas'),
+        framework: z
+          .enum(['next-app', 'next-pages', 'react', 'core'])
+          .optional()
+          .describe('Frontend framework, used to tailor setup; defaults to next-app'),
+        websiteUrl: z
+          .string()
+          .optional()
+          .describe("Production site origin to allow-list so the SDK's events aren't origin-blocked on day one"),
+      },
+      outputSchema: {
+        projectId: z.string().describe('The new project UUID'),
+        publicKey: z.string().describe('The pk_ public key to configure the SDK with'),
+        name: z.string().describe('The project name'),
+        contextType: z.string().describe('The resolved context type'),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
     },
     async ({ name, contextType, framework, websiteUrl }) => {
       try {
@@ -51,15 +67,22 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
           framework,
           origin: websiteUrl,
         });
+        const resolvedContextType = contextType ?? 'saas';
         return {
           content: [{
             type: 'text' as const,
             text: [
-              `Created project "${name}" (id: ${created.id}, type: ${contextType ?? 'saas'}).`,
+              `Created project "${name}" (id: ${created.id}, type: ${resolvedContextType}).`,
               `Public key: ${created.apiKey}`,
               `Next: install @sentientui/react with this key. Ask me to pull the setup guide (get_integration_guide) and I'll wrap your first component.`,
             ].join('\n'),
           }],
+          structuredContent: {
+            projectId: created.id,
+            publicKey: created.apiKey,
+            name,
+            contextType: resolvedContextType,
+          },
         };
       } catch (err) {
         if (err instanceof ApiError) {
@@ -73,10 +96,30 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
     },
   );
 
-  server.tool(
+  server.registerTool(
     'list_projects',
-    'List all SentientUI projects for the authenticated account.',
-    {},
+    {
+      title: 'List projects',
+      description: 'List all SentientUI projects for the authenticated account.',
+      inputSchema: {},
+      outputSchema: {
+        projects: z
+          .array(
+            z.object({
+              id: z.string().describe('Project UUID'),
+              name: z.string(),
+              contextType: z.string(),
+              createdAt: z.string().describe('ISO date (YYYY-MM-DD)'),
+            }),
+          )
+          .describe('All projects for the account (empty if none)'),
+      },
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
     async () => {
       const projects = await client.get<Array<{
         id: string;
@@ -91,14 +134,39 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
             `- ${p.name} (id: ${p.id}, type: ${p.context_type}, created: ${p.created_at.slice(0, 10)})`
           ).join('\n');
 
-      return { content: [{ type: 'text' as const, text }] };
+      return {
+        content: [{ type: 'text' as const, text }],
+        structuredContent: {
+          projects: projects.map((p) => ({
+            id: p.id,
+            name: p.name,
+            contextType: p.context_type,
+            createdAt: p.created_at.slice(0, 10),
+          })),
+        },
+      };
     },
   );
 
-  server.tool(
+  server.registerTool(
     'get_project_stats',
-    'Get health stats for a project: event volume, session count, agent calls, and status.',
-    { projectId: projectIdSchema },
+    {
+      title: 'Project health stats',
+      description: 'Get health stats for a project: event volume, session count, agent calls, and status.',
+      inputSchema: { projectId: projectIdSchema },
+      outputSchema: {
+        status: z.string().describe('Overall project health status'),
+        events24h: z.number().describe('Events in the last 24 hours'),
+        sessions24h: z.number().describe('Sessions in the last 24 hours'),
+        agentCalls: z.number().describe('Total agent (MCP/API) calls'),
+        lastEventAt: z.string().nullable().describe('ISO timestamp of the last event, or null'),
+      },
+      annotations: {
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
     async ({ projectId }) => {
       const id = encodeURIComponent(projectId);
       const stats = await client.get<{
@@ -117,7 +185,16 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
         `Last event: ${stats.lastEventAt ?? 'never'}`,
       ].join('\n');
 
-      return { content: [{ type: 'text' as const, text }] };
+      return {
+        content: [{ type: 'text' as const, text }],
+        structuredContent: {
+          status: stats.status,
+          events24h: stats.events24h,
+          sessions24h: stats.sessions24h,
+          agentCalls: stats.agentCalls,
+          lastEventAt: stats.lastEventAt,
+        },
+      };
     },
   );
 }
