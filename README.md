@@ -1,5 +1,7 @@
 # @sentientui/mcp
 
+[![smithery badge](https://smithery.ai/badge/carlos-sanchez/sentientUI)](https://smithery.ai/servers/carlos-sanchez/sentientUI)
+
 MCP server for [SentientUI](https://sentient-ui.com) — gives AI agents in Claude Code, Cursor, and Copilot direct access to your experiment data and management actions.
 
 ## Quick start
