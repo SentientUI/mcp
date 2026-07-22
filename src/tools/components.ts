@@ -31,12 +31,15 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
     },
     async ({ projectId }) => {
       const id = encodeURIComponent(projectId);
-      const components = await client.get<Array<{
-        component_id: string;
-        total_impressions: number;
-        total_conversions: number;
-        variants: Array<{ variant_id: string }>;
-      }>>(`/projects/${id}/components`);
+      // The mgmt API returns a paginated envelope: { components, total, page, limit }.
+      const { components } = await client.get<{
+        components: Array<{
+          component_id: string;
+          total_impressions: number;
+          total_conversions: number;
+          variants: Array<{ variant_id: string }>;
+        }>;
+      }>(`/projects/${id}/components`);
 
       const structuredContent = {
         components: components.map((c) => ({

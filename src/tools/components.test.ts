@@ -13,9 +13,15 @@ function makeServer() {
 describe('list_components', () => {
   it('returns component names and variant counts', async () => {
     const client = new ApiClient({ apiKey: 'sk_test' });
-    vi.spyOn(client, 'get').mockResolvedValue([
-      { component_id: 'hero', total_impressions: 500, total_conversions: 75, variants: [{ variant_id: 'v_a' }, { variant_id: 'v_b' }] },
-    ]);
+    // The mgmt API returns a paginated envelope, not a bare array.
+    vi.spyOn(client, 'get').mockResolvedValue({
+      components: [
+        { component_id: 'hero', total_impressions: 500, total_conversions: 75, variants: [{ variant_id: 'v_a' }, { variant_id: 'v_b' }] },
+      ],
+      total: 1,
+      page: 1,
+      limit: 50,
+    });
     const server = makeServer();
     registerComponentTools(server as any, client);
     const result = await server.tools['list_components']!.handler({ projectId: 'p1' });
@@ -26,7 +32,7 @@ describe('list_components', () => {
 
   it('shows no-components message when list is empty', async () => {
     const client = new ApiClient({ apiKey: 'sk_test' });
-    vi.spyOn(client, 'get').mockResolvedValue([]);
+    vi.spyOn(client, 'get').mockResolvedValue({ components: [], total: 0, page: 1, limit: 50 });
     const server = makeServer();
     registerComponentTools(server as any, client);
     const result = await server.tools['list_components']!.handler({ projectId: 'p1' });
