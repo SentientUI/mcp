@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ApiClient } from '../api-client.js';
+import { uiMeta } from '../ui/index.js';
 
 const projectIdSchema = z.string().uuid().describe('The project UUID');
 
@@ -11,6 +12,7 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
       title: 'Goal funnel',
       description: 'Get goal hit counts, unique-session conversion rates, and per-variant breakdown.',
       inputSchema: { projectId: projectIdSchema },
+      _meta: uiMeta('goal-funnel'),
       outputSchema: {
         goals: z
           .array(
@@ -68,6 +70,7 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
         return {
           content: [{ type: 'text' as const, text: 'No goals configured for this project.' }],
           structuredContent,
+          _meta: uiMeta('goal-funnel'),
         };
       }
 
@@ -77,7 +80,7 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
         '',
       ]);
 
-      return { content: [{ type: 'text' as const, text: lines.join('\n').trim() }], structuredContent };
+      return { content: [{ type: 'text' as const, text: lines.join('\n').trim() }], structuredContent, _meta: uiMeta('goal-funnel') };
     },
   );
 }

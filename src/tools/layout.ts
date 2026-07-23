@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ApiClient } from '../api-client.js';
+import { uiMeta } from '../ui/index.js';
 
 const projectIdSchema = z.string().uuid().describe('The project UUID');
 
@@ -11,6 +12,7 @@ export function registerLayoutTools(server: McpServer, client: ApiClient): void 
       title: 'Layout stats',
       description: 'Get per-persona section layout rankings and bandit reward weights.',
       inputSchema: { projectId: projectIdSchema },
+      _meta: uiMeta('layout-stats'),
       outputSchema: {
         layouts: z
           .array(
@@ -51,6 +53,7 @@ export function registerLayoutTools(server: McpServer, client: ApiClient): void 
         return {
           content: [{ type: 'text' as const, text: 'No layout data yet. More visitor sessions are needed.' }],
           structuredContent,
+          _meta: uiMeta('layout-stats'),
         };
       }
 
@@ -58,7 +61,7 @@ export function registerLayoutTools(server: McpServer, client: ApiClient): void 
         `- ${s.persona}: [${s.layoutOrder.join(' → ')}] (avg reward: ${s.avgReward.toFixed(2)}, ${s.pulls} pulls)`
       ).join('\n');
 
-      return { content: [{ type: 'text' as const, text }], structuredContent };
+      return { content: [{ type: 'text' as const, text }], structuredContent, _meta: uiMeta('layout-stats') };
     },
   );
 }

@@ -137,9 +137,10 @@ export function registerVariantBriefTools(server: McpServer, client: ApiClient):
     async ({ projectId, componentId }) => {
       const id = encodeURIComponent(projectId);
 
-      const [projects, components, trends, portraits, insights] = await Promise.all([
+      const [projects, componentsEnvelope, trends, portraits, insights] = await Promise.all([
         settled(client.get<ProjectRow[]>('/projects')),
-        settled(client.get<ComponentRow[]>(`/projects/${id}/components`)),
+        // mgmt API returns a paginated envelope: { components, total, page, limit }.
+        settled(client.get<{ components: ComponentRow[] }>(`/projects/${id}/components`)),
         settled(client.get<TrendsResponse>(`/projects/${id}/trends`)),
         settled(client.get<PortraitsResponse>(`/projects/${id}/portraits`)),
         settled(client.get<InsightsResponse>(`/projects/${id}/insights`)),
@@ -148,7 +149,8 @@ export function registerVariantBriefTools(server: McpServer, client: ApiClient):
       const project = projects?.find((p) => p.id === projectId) ?? null;
       const contextType = project?.context_type ?? 'unknown';
 
-      const component = components?.find((c) => c.component_id === componentId) ?? null;
+      const components = componentsEnvelope?.components ?? [];
+      const component = components.find((c) => c.component_id === componentId) ?? null;
       const impressions = component?.total_impressions ?? 0;
       const conversions = component?.total_conversions ?? 0;
       const componentCvr = impressions > 0 ? (conversions / impressions) * 100 : 0;

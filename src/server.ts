@@ -18,12 +18,16 @@ import { registerVariantWriteTools } from './tools/variants.js';
 import { registerVariantBriefTools } from './tools/variant-brief.js';
 import { registerTestBriefTools } from './tools/test-brief.js';
 import { registerIntegrationGuideTools } from './tools/integration-guide.js';
+import { registerUiResources } from './ui/index.js';
 
 export function createMcpServer(client: ApiClient): McpServer {
   const server = new McpServer({
     name: '@sentientui/mcp',
     version: PKG_VERSION,
   });
+
+  // MCP Apps: register the ui:// resources the data-viz tools link to via _meta.
+  registerUiResources(server);
 
   registerProjectTools(server, client);
   registerComponentTools(server, client);

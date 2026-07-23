@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ApiClient } from '../api-client.js';
+import { uiMeta } from '../ui/index.js';
 
 const projectIdSchema = z.string().uuid().describe('The project UUID');
 
@@ -71,6 +72,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
       title: 'Variant performance',
       description: 'Get CVR and momentum for all variants in a project over the last 7 days vs prior 7 days.',
       inputSchema: { projectId: projectIdSchema },
+      _meta: uiMeta('variant-performance'),
       outputSchema: {
         variants: z
           .array(
@@ -120,6 +122,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
         return {
           content: [{ type: 'text' as const, text: 'No variant data available yet.' }],
           structuredContent,
+          _meta: uiMeta('variant-performance'),
         };
       }
 
@@ -127,7 +130,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
         `- ${v.variantId}: CVR ${(v.currentCvr * 100).toFixed(2)}% (prior ${(v.priorCvr * 100).toFixed(2)}%, ${v.deltaPp > 0 ? '+' : ''}${v.deltaPp.toFixed(1)} pp, ${momentumMap.get(v.variantId) ?? 'stable'})`
       ).join('\n');
 
-      return { content: [{ type: 'text' as const, text }], structuredContent };
+      return { content: [{ type: 'text' as const, text }], structuredContent, _meta: uiMeta('variant-performance') };
     },
   );
 }

@@ -48,12 +48,14 @@ async function run(responses: Parameters<typeof mockClient>[1], componentId = 'h
 
 const sufficientResponses = {
   projects: [{ id: PROJECT_ID, name: 'Shop', context_type: 'ecommerce' }],
-  components: [{
-    component_id: 'hero',
-    total_impressions: 800,
-    total_conversions: 80,
-    variants: [{ variant_id: 'v_a' }, { variant_id: 'v_b' }],
-  }],
+  components: {
+    components: [{
+      component_id: 'hero',
+      total_impressions: 800,
+      total_conversions: 80,
+      variants: [{ variant_id: 'v_a' }, { variant_id: 'v_b' }],
+    }],
+  },
   trends: {
     cvr: [{ variantId: 'v_a', currentCvr: 0.12, priorCvr: 0.10, deltaPp: 2 }],
     momentum: [{ variantId: 'v_a', direction: 'gaining' }],
@@ -80,12 +82,14 @@ describe('get_variant_brief — DataState branches', () => {
   it('reports COLLECTING when impressions below target (500)', async () => {
     const text = await run({
       ...sufficientResponses,
-      components: [{
-        component_id: 'hero',
-        total_impressions: 100,
-        total_conversions: 10,
-        variants: [{ variant_id: 'v_a' }],
-      }],
+      components: {
+        components: [{
+          component_id: 'hero',
+          total_impressions: 100,
+          total_conversions: 10,
+          variants: [{ variant_id: 'v_a' }],
+        }],
+      },
     });
     expect(text).toContain('## Data sufficiency: COLLECTING');
     expect(text).toContain('Limited data so far.');
@@ -114,7 +118,9 @@ describe('get_variant_brief — DataState branches', () => {
   it('reports EMPTY when impressions are 0', async () => {
     const text = await run({
       ...sufficientResponses,
-      components: [{ component_id: 'hero', total_impressions: 0, total_conversions: 0, variants: [] }],
+      components: {
+        components: [{ component_id: 'hero', total_impressions: 0, total_conversions: 0, variants: [] }],
+      },
     });
     expect(text).toContain('## Data sufficiency: EMPTY');
     expect(text).toContain('No data yet');
@@ -177,7 +183,7 @@ describe('get_variant_brief — empty / missing component', () => {
   it('shows the new-component note when component is not found', async () => {
     const text = await run({
       ...sufficientResponses,
-      components: [], // hero not present
+      components: { components: [] }, // hero not present
     });
     expect(text).toContain('no component named "hero" has reported data yet');
     // No "Component performance" section when component missing

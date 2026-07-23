@@ -37,12 +37,14 @@ export function registerTestBriefTools(server: McpServer, client: ApiClient): vo
     },
     async ({ projectId, componentId }) => {
       const id = encodeURIComponent(projectId);
-      const [components, goalsRes] = await Promise.all([
-        settled(client.get<ComponentRow[]>(`/projects/${id}/components`)),
+      const [componentsEnvelope, goalsRes] = await Promise.all([
+        // mgmt API returns a paginated envelope: { components, total, page, limit }.
+        settled(client.get<{ components: ComponentRow[] }>(`/projects/${id}/components`)),
         settled(client.get<GoalsResponse>(`/projects/${id}/goals`)),
       ]);
 
-      const component = components?.find((c) => c.component_id === componentId) ?? null;
+      const components = componentsEnvelope?.components ?? [];
+      const component = components.find((c) => c.component_id === componentId) ?? null;
       const variantIds = component?.variants.map((v) => v.variant_id) ?? [];
       const goals = Array.isArray(goalsRes) ? goalsRes : (goalsRes?.goals ?? []);
       const goalName = goals[0]?.goalName ?? 'signup';

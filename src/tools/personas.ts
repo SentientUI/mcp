@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ApiClient } from '../api-client.js';
+import { uiMeta } from '../ui/index.js';
 
 const projectIdSchema = z.string().uuid().describe('The project UUID');
 
@@ -11,6 +12,7 @@ export function registerPersonaTools(server: McpServer, client: ApiClient): void
       title: 'Persona breakdown',
       description: 'Get the distribution of visitor persona clusters with session counts and reliability scores.',
       inputSchema: { projectId: projectIdSchema },
+      _meta: uiMeta('persona-breakdown'),
       outputSchema: {
         totalSessions: z.number().describe('Total sessions across all clusters'),
         clusters: z
@@ -51,6 +53,7 @@ export function registerPersonaTools(server: McpServer, client: ApiClient): void
         return {
           content: [{ type: 'text' as const, text: 'No persona clusters yet. More visitor data is needed.' }],
           structuredContent,
+          _meta: uiMeta('persona-breakdown'),
         };
       }
 
@@ -64,7 +67,7 @@ export function registerPersonaTools(server: McpServer, client: ApiClient): void
         }),
       ];
 
-      return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent };
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent, _meta: uiMeta('persona-breakdown') };
     },
   );
 }
