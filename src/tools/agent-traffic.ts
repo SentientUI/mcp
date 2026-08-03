@@ -50,7 +50,7 @@ export function registerAgentTrafficTools(server: McpServer, client: ApiClient):
         return {
           content: [{
             type: 'text' as const,
-            text: 'No agent traffic observed yet. Passive crawlers (GPTBot, ClaudeBot, …) run no JavaScript — install sentientAgentMiddleware from @sentientui/react/next to capture them server-side.',
+            text: 'No agent traffic observed yet. Passive crawlers (GPTBot, ClaudeBot, …) run no JavaScript — wrap your app in AdaptiveRoot from @sentientui/react/next to capture their fetches server-side.',
           }],
           structuredContent,
         };

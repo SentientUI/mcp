@@ -37,7 +37,7 @@ describe('get_agent_traffic', () => {
     const server = setup(() => ({ totals: { crawler: 0, api: 0, browser: 0 }, engines: [], topPaths: [], daily: [] }));
     const res = await server.tools['get_agent_traffic']!.handler({ projectId: 'p1' });
     expect(res.content[0].text).toContain('No agent traffic observed yet');
-    expect(res.content[0].text).toContain('sentientAgentMiddleware');
+    expect(res.content[0].text).toContain('AdaptiveRoot');
   });
 
   it('returns upgrade guidance (not a throw) on the plan gate', async () => {
