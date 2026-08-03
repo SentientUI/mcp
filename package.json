@@ -1,6 +1,6 @@
 {
   "name": "@sentientui/mcp",
-  "version": "0.6.0",
+  "version": "0.9.0",
   "description": "MCP server for SentientUI — exposes project data and actions to AI agents",
   "license": "MIT",
   "homepage": "https://sentient-ui.com",
@@ -22,14 +22,14 @@
   "bin": {
     "sentientui-mcp": "./dist/index.js"
   },
-  "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
+  "main": "./dist/lib.cjs",
+  "module": "./dist/lib.js",
+  "types": "./dist/lib.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js"
+      "types": "./dist/lib.d.ts",
+      "import": "./dist/lib.js",
+      "require": "./dist/lib.cjs"
     },
     "./server": {
       "types": "./dist/lib.d.ts",
@@ -48,13 +48,14 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "dev": "tsx src/index.ts",
+    "lint": "eslint src",
     "prepublishOnly": "pnpm build && pnpm typecheck"
   },
   "publishConfig": {
     "access": "public"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

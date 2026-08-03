@@ -1,8 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ApiClient } from '../api-client.js';
-
-const projectIdSchema = z.string().uuid().describe('The project UUID');
+import { projectIdSchema, withApiErrorGuidance } from './common.js';
 
 /** Impressions on a component before its bandit posteriors are considered settled. */
 const GOAL_TARGET = 500;
@@ -134,7 +133,7 @@ export function registerVariantBriefTools(server: McpServer, client: ApiClient):
         openWorldHint: false,
       },
     },
-    async ({ projectId, componentId }) => {
+    withApiErrorGuidance(async ({ projectId, componentId }) => {
       const id = encodeURIComponent(projectId);
 
       const [projects, componentsEnvelope, trends, portraits, insights] = await Promise.all([
@@ -255,6 +254,6 @@ export function registerVariantBriefTools(server: McpServer, client: ApiClient):
           markdown,
         },
       };
-    },
+    }),
   );
 }

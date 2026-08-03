@@ -1,8 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ApiClient } from '../api-client.js';
-
-const projectIdSchema = z.string().uuid().describe('The project UUID');
+import { projectIdSchema, withApiErrorGuidance } from './common.js';
 
 export function registerGuardrailTools(server: McpServer, client: ApiClient): void {
   server.registerTool(
@@ -28,7 +27,7 @@ export function registerGuardrailTools(server: McpServer, client: ApiClient): vo
         openWorldHint: false,
       },
     },
-    async ({ projectId }) => {
+    withApiErrorGuidance(async ({ projectId }) => {
       const id = encodeURIComponent(projectId);
       const data = await client.get<{
         guardrailEvents: Array<{
@@ -58,6 +57,6 @@ export function registerGuardrailTools(server: McpServer, client: ApiClient): vo
       );
 
       return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent };
-    },
+    }),
   );
 }

@@ -2,8 +2,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ApiClient } from '../api-client.js';
 import { uiMeta } from '../ui/index.js';
-
-const projectIdSchema = z.string().uuid().describe('The project UUID');
+import { projectIdSchema, withApiErrorGuidance } from './common.js';
 
 export function registerComponentTools(server: McpServer, client: ApiClient): void {
   server.registerTool(
@@ -30,7 +29,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
         openWorldHint: false,
       },
     },
-    async ({ projectId }) => {
+    withApiErrorGuidance(async ({ projectId }) => {
       const id = encodeURIComponent(projectId);
       // The mgmt API returns a paginated envelope: { components, total, page, limit }.
       const { components } = await client.get<{
@@ -63,7 +62,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
       ).join('\n');
 
       return { content: [{ type: 'text' as const, text }], structuredContent };
-    },
+    }),
   );
 
   server.registerTool(
@@ -92,7 +91,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
         openWorldHint: false,
       },
     },
-    async ({ projectId }) => {
+    withApiErrorGuidance(async ({ projectId }) => {
       const id = encodeURIComponent(projectId);
       const data = await client.get<{
         cvr: Array<{
@@ -131,6 +130,6 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
       ).join('\n');
 
       return { content: [{ type: 'text' as const, text }], structuredContent, _meta: uiMeta('variant-performance') };
-    },
+    }),
   );
 }

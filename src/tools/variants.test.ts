@@ -1,11 +1,20 @@
 import { describe, it, expect, vi } from 'vitest';
+import { z } from 'zod';
+import type { ToolHandler } from './test-utils.js';
 import { ApiClient } from '../api-client.js';
 import { registerVariantWriteTools } from './variants.js';
 
+type ToolConfig = {
+  inputSchema?: Record<string, z.ZodTypeAny>;
+  outputSchema?: Record<string, z.ZodTypeAny>;
+};
+
 function makeServer() {
-  const tools: Record<string, { handler: Function }> = {};
+  const tools: Record<string, { config: ToolConfig; handler: ToolHandler }> = {};
   return {
-    registerTool: vi.fn((name: string, _config: unknown, handler: Function) => { tools[name] = { handler }; }),
+    registerTool: vi.fn((name: string, config: ToolConfig, handler: ToolHandler) => {
+      tools[name] = { config, handler };
+    }),
     tools,
   };
 }
@@ -28,6 +37,36 @@ describe('create_variant', () => {
       { componentId: 'hero', displayName: 'V2' },
     );
     expect(result.content[0].text).toContain('v_new');
+  });
+
+  it('output schema accepts a null displayName (API returns displayName ?? null)', () => {
+    const server = makeServer();
+    registerVariantWriteTools(server as any, new ApiClient({ apiKey: 'sk_test' }));
+    const out = z.object(server.tools['create_variant']!.config.outputSchema!);
+    // A successful create whose displayName came back null must still validate.
+    expect(() =>
+      out.parse({
+        variantId: 'v1',
+        displayName: null,
+        componentId: 'hero',
+        state: 'draft',
+        hasContent: false,
+      }),
+    ).not.toThrow();
+  });
+
+  it('input schema requires non-empty componentId and displayName', () => {
+    const server = makeServer();
+    registerVariantWriteTools(server as any, new ApiClient({ apiKey: 'sk_test' }));
+    const input = z.object(server.tools['create_variant']!.config.inputSchema!);
+    const base = {
+      projectId: '00000000-0000-0000-0000-000000000001',
+      componentId: 'hero',
+      displayName: 'V2',
+    };
+    expect(input.safeParse(base).success).toBe(true);
+    expect(input.safeParse({ ...base, componentId: '' }).success).toBe(false);
+    expect(input.safeParse({ ...base, displayName: '' }).success).toBe(false);
   });
 });
 

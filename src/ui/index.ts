@@ -7,6 +7,14 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { buildTemplate, VIZ_TITLES, type VizId } from './templates.js';
 
+/**
+ * MCP Apps (SEP-1865, extension `io.modelcontextprotocol/ui`) mandates this exact
+ * media type for HTML UI resources — `mimeType` MUST be `text/html;profile=mcp-app`.
+ * A spec-compliant host/scanner enumerates `ui://` resources and filters by this
+ * type, so a bare `text/html` resource is ignored (counts as "no UI support").
+ */
+export const RESOURCE_MIME_TYPE = 'text/html;profile=mcp-app';
+
 /** The data-viz tools that carry an interactive UI template, and their viz ids. */
 export const UI_TOOL_VIZ: Record<string, VizId> = {
   get_persona_breakdown: 'persona-breakdown',
@@ -45,13 +53,13 @@ export function registerUiResources(server: McpServer): void {
       {
         title: `${VIZ_TITLES[id]} (UI)`,
         description: `Interactive ${VIZ_TITLES[id]} view for agent hosts that support MCP UI.`,
-        mimeType: 'text/html',
+        mimeType: RESOURCE_MIME_TYPE,
       },
       async (uri) => ({
         contents: [
           {
             uri: uri.href,
-            mimeType: 'text/html',
+            mimeType: RESOURCE_MIME_TYPE,
             text: buildTemplate(id),
           },
         ],

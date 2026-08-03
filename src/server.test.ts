@@ -39,11 +39,28 @@ describe('createMcpServer', () => {
       'pause_variant',
       'refresh_insights',
       'get_integration_guide',
+      'get_agent_traffic',
+      'get_agent_legibility',
     ];
 
     for (const name of expected) {
       expect(names).toContain(name);
     }
     expect(names.length).toBe(expected.length);
+  });
+
+  it('advertises the MCP Apps (io.modelcontextprotocol/ui) extension capability', () => {
+    const client = new ApiClient({ apiKey: 'sk_test' });
+    const server = createMcpServer(client) as any;
+
+    // The low-level Server echoes these in the initialize result. A spec-aware
+    // host/scanner negotiates MCP Apps off this exact key + mime type.
+    const caps = server.server.getCapabilities();
+    expect(caps.extensions?.['io.modelcontextprotocol/ui']?.mimeTypes).toEqual([
+      'text/html;profile=mcp-app',
+    ]);
+    // Registering tools/resources must not clobber the extension capability.
+    expect(caps.tools).toBeDefined();
+    expect(caps.resources).toBeDefined();
   });
 });

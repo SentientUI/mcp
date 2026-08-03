@@ -1,8 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ApiClient } from '../api-client.js';
-
-const projectIdSchema = z.string().uuid().describe('The project UUID');
+import { projectIdSchema, withApiErrorGuidance } from './common.js';
 
 export function registerInsightTools(server: McpServer, client: ApiClient): void {
   server.registerTool(
@@ -24,7 +23,7 @@ export function registerInsightTools(server: McpServer, client: ApiClient): void
         openWorldHint: false,
       },
     },
-    async ({ projectId }) => {
+    withApiErrorGuidance(async ({ projectId }) => {
       const id = encodeURIComponent(projectId);
       const data = await client.get<{
         status: 'ok' | 'empty';
@@ -72,6 +71,6 @@ export function registerInsightTools(server: McpServer, client: ApiClient): void
           generatedAt: data.generatedAt ?? null,
         },
       };
-    },
+    }),
   );
 }

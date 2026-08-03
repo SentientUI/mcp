@@ -1,8 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ApiClient } from '../api-client.js';
-
-const projectIdSchema = z.string().uuid().describe('The project UUID');
+import { projectIdSchema, withApiErrorGuidance } from './common.js';
 
 export function registerVariantWriteTools(server: McpServer, client: ApiClient): void {
   server.registerTool(
@@ -12,13 +11,16 @@ export function registerVariantWriteTools(server: McpServer, client: ApiClient):
       description: 'Create a NO-CODE managed text variant for a component (content stored in SentientUI, rendered by <AdaptiveText>). Use this ONLY for text-only variants the user wants without a code change. For variants that will live in the codebase (full components — copy, markup, styling), use get_variant_brief and write the variant in code instead; those auto-register on deploy and do not need create_variant. Requires a paid plan (server keys are Starter+; anonymous demo tokens are read-only).',
       inputSchema: {
         projectId: projectIdSchema,
-        componentId: z.string().describe('The component ID to add a variant to'),
-        displayName: z.string().describe('Human-readable name for the new variant'),
-        content: z.string().optional().describe('The text content for this managed variant (rendered by <AdaptiveText>). Generate it from get_variant_brief context; omit only to create an empty placeholder to fill in from the dashboard.'),
+        componentId: z.string().min(1).max(200).describe('The component ID to add a variant to'),
+        displayName: z.string().min(1).max(200).describe('Human-readable name for the new variant'),
+        content: z.string().max(10000).optional().describe('The text content for this managed variant (rendered by <AdaptiveText>). Generate it from get_variant_brief context; omit only to create an empty placeholder to fill in from the dashboard.'),
       },
       outputSchema: {
         variantId: z.string().describe('The new variant ID'),
-        displayName: z.string(),
+        // API returns `body.displayName ?? null`, so a successful create can
+        // carry a null name — match that contract or outputSchema validation
+        // would reject an otherwise-successful response.
+        displayName: z.string().nullable(),
         componentId: z.string(),
         state: z.literal('draft').describe('New managed variants start in draft state'),
         hasContent: z.boolean().describe('Whether text content was provided at creation'),
@@ -30,7 +32,7 @@ export function registerVariantWriteTools(server: McpServer, client: ApiClient):
         openWorldHint: false,
       },
     },
-    async ({ projectId, componentId, displayName, content }) => {
+    withApiErrorGuidance(async ({ projectId, componentId, displayName, content }) => {
       const id = encodeURIComponent(projectId);
       const result = await client.post<{ variantId: string; displayName: string }>(
         `/projects/${id}/variants`,
@@ -52,7 +54,7 @@ export function registerVariantWriteTools(server: McpServer, client: ApiClient):
           hasContent: Boolean(content),
         },
       };
-    },
+    }),
   );
 
   server.registerTool(
@@ -77,7 +79,7 @@ export function registerVariantWriteTools(server: McpServer, client: ApiClient):
         openWorldHint: false,
       },
     },
-    async ({ projectId, componentId, variantId }) => {
+    withApiErrorGuidance(async ({ projectId, componentId, variantId }) => {
       const id = encodeURIComponent(projectId);
       await client.post(`/projects/${id}/variants/pause`, { componentId, variantId });
       return {
@@ -87,7 +89,7 @@ export function registerVariantWriteTools(server: McpServer, client: ApiClient):
         }],
         structuredContent: { variantId, componentId, paused: true as const },
       };
-    },
+    }),
   );
 
   server.registerTool(
@@ -107,7 +109,7 @@ export function registerVariantWriteTools(server: McpServer, client: ApiClient):
         openWorldHint: false,
       },
     },
-    async ({ projectId }) => {
+    withApiErrorGuidance(async ({ projectId }) => {
       const id = encodeURIComponent(projectId);
       await client.post(`/projects/${id}/insights/refresh`);
       return {
@@ -117,6 +119,6 @@ export function registerVariantWriteTools(server: McpServer, client: ApiClient):
         }],
         structuredContent: { projectId, status: 'generating' as const },
       };
-    },
+    }),
   );
 }

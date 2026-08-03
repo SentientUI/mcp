@@ -1,28 +1,16 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { ApiClient, ApiError } from '../api-client.js';
+import type { ApiClient } from '../api-client.js';
+import { projectIdSchema, withApiErrorGuidance, type ExtraGuidance } from './common.js';
 
-const projectIdSchema = z.string().uuid().describe('The project UUID');
-
-// The create endpoint legitimately refuses some auth modes; translate those into
-// actionable guidance rather than a bare error code, since this is often a new
-// user's first interaction.
-function createProjectGuidance(err: ApiError): string | null {
-  switch (err.message) {
-    case 'insufficient_scope':
-      return 'Creating a project needs an account login. Connect via the hosted MCP URL (https://api.sentient-ui.com/mcp) and sign in — a project-scoped server key (sk_…) cannot create projects.';
-    case 'demo_read_only':
-      return 'Demo mode is read-only. Create a SentientUI account and sign in to make projects.';
-    case 'insufficient_role':
-      return 'Your account role cannot create projects — this needs the account owner or an admin.';
-    case 'project_limit_reached':
-      return "You've reached your plan's project limit. Upgrade your plan or remove an existing project, then try again.";
-    case 'name_required':
-      return 'A project name is required to create a project.';
-    default:
-      return null;
-  }
-}
+// Create-specific codes the shared mapper doesn't know. Auth-mode refusals
+// (insufficient_scope / demo_read_only / insufficient_role) intentionally fall
+// through to the shared apiErrorGuidance wording — ONE guidance source, no fork.
+const CREATE_PROJECT_GUIDANCE: ExtraGuidance = {
+  project_limit_reached:
+    "You've reached your plan's project limit. Upgrade your plan or remove an existing project, then try again.",
+  name_required: 'A project name is required to create a project.',
+};
 
 export function registerProjectTools(server: McpServer, client: ApiClient): void {
   server.registerTool(
@@ -34,13 +22,13 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
       inputSchema: {
         name: z.string().min(1).describe('Human-readable project name'),
         contextType: z
-          .enum(['saas', 'ecommerce', 'marketing', 'internal'])
+          .enum(['saas', 'ecommerce', 'marketing', 'landing', 'internal'])
           .optional()
           .describe('What kind of product this is; defaults to saas'),
         framework: z
-          .enum(['next-app', 'next-pages', 'react', 'core'])
+          .enum(['next', 'react', 'core'])
           .optional()
-          .describe('Frontend framework, used to tailor setup; defaults to next-app'),
+          .describe('How the site is built — next, react, or core (website builder/CMS); defaults to next'),
         websiteUrl: z
           .string()
           .optional()
@@ -59,41 +47,31 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
         openWorldHint: false,
       },
     },
-    async ({ name, contextType, framework, websiteUrl }) => {
-      try {
-        const created = await client.post<{ id: string; apiKey: string }>('/projects', {
+    withApiErrorGuidance(async ({ name, contextType, framework, websiteUrl }) => {
+      const created = await client.post<{ id: string; apiKey: string }>('/projects', {
+        name,
+        contextType,
+        framework,
+        origin: websiteUrl,
+      });
+      const resolvedContextType = contextType ?? 'saas';
+      return {
+        content: [{
+          type: 'text' as const,
+          text: [
+            `Created project "${name}" (id: ${created.id}, type: ${resolvedContextType}).`,
+            `Public key: ${created.apiKey}`,
+            `Next: install @sentientui/react with this key. Ask me to pull the setup guide (get_integration_guide) and I'll wrap your first component.`,
+          ].join('\n'),
+        }],
+        structuredContent: {
+          projectId: created.id,
+          publicKey: created.apiKey,
           name,
-          contextType,
-          framework,
-          origin: websiteUrl,
-        });
-        const resolvedContextType = contextType ?? 'saas';
-        return {
-          content: [{
-            type: 'text' as const,
-            text: [
-              `Created project "${name}" (id: ${created.id}, type: ${resolvedContextType}).`,
-              `Public key: ${created.apiKey}`,
-              `Next: install @sentientui/react with this key. Ask me to pull the setup guide (get_integration_guide) and I'll wrap your first component.`,
-            ].join('\n'),
-          }],
-          structuredContent: {
-            projectId: created.id,
-            publicKey: created.apiKey,
-            name,
-            contextType: resolvedContextType,
-          },
-        };
-      } catch (err) {
-        if (err instanceof ApiError) {
-          const guidance = createProjectGuidance(err);
-          if (guidance) {
-            return { content: [{ type: 'text' as const, text: guidance }], isError: true };
-          }
-        }
-        throw err;
-      }
-    },
+          contextType: resolvedContextType,
+        },
+      };
+    }, CREATE_PROJECT_GUIDANCE),
   );
 
   server.registerTool(
@@ -120,7 +98,7 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
         openWorldHint: false,
       },
     },
-    async () => {
+    withApiErrorGuidance(async () => {
       const projects = await client.get<Array<{
         id: string;
         name: string;
@@ -145,7 +123,7 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
           })),
         },
       };
-    },
+    }),
   );
 
   server.registerTool(
@@ -167,7 +145,7 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
         openWorldHint: false,
       },
     },
-    async ({ projectId }) => {
+    withApiErrorGuidance(async ({ projectId }) => {
       const id = encodeURIComponent(projectId);
       const stats = await client.get<{
         status: string;
@@ -195,6 +173,6 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
           lastEventAt: stats.lastEventAt,
         },
       };
-    },
+    }),
   );
 }

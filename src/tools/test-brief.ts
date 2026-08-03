@@ -1,8 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ApiClient } from '../api-client.js';
-
-const projectIdSchema = z.string().uuid().describe('The project UUID');
+import { projectIdSchema, withApiErrorGuidance } from './common.js';
 
 type ComponentRow = { component_id: string; variants: Array<{ variant_id: string }> };
 type GoalRow = { goalName: string };
@@ -35,7 +34,7 @@ export function registerTestBriefTools(server: McpServer, client: ApiClient): vo
         openWorldHint: false,
       },
     },
-    async ({ projectId, componentId }) => {
+    withApiErrorGuidance(async ({ projectId, componentId }) => {
       const id = encodeURIComponent(projectId);
       const [componentsEnvelope, goalsRes] = await Promise.all([
         // mgmt API returns a paginated envelope: { components, total, page, limit }.
@@ -109,6 +108,6 @@ export function registerTestBriefTools(server: McpServer, client: ApiClient): vo
         content: [{ type: 'text' as const, text: markdown }],
         structuredContent: { componentId, forcedVariantId: forcedId, goalName, markdown },
       };
-    },
+    }),
   );
 }

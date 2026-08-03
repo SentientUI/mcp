@@ -9,6 +9,7 @@ import {
   registerUiResources,
   uiMeta,
   uiResourceUri,
+  RESOURCE_MIME_TYPE,
   UI_TOOL_VIZ,
   VIZ_TITLES,
   type VizId,
@@ -26,7 +27,7 @@ describe('uiMeta / uiResourceUri', () => {
 });
 
 describe('registerUiResources', () => {
-  it('registers one ui:// text/html resource per viz', async () => {
+  it('registers one ui:// resource per viz with the spec-mandated mime type', async () => {
     const resources: Array<{ name: string; uri: string; config: any; cb: any }> = [];
     const fakeServer = {
       registerResource: vi.fn((name, uri, config, cb) => {
@@ -36,13 +37,15 @@ describe('registerUiResources', () => {
 
     registerUiResources(fakeServer as any);
 
+    // SEP-1865 mandates this exact media type; anything else is ignored by hosts.
+    expect(RESOURCE_MIME_TYPE).toBe('text/html;profile=mcp-app');
     expect(resources).toHaveLength(VIZ_IDS.length);
     for (const r of resources) {
       expect(r.uri).toMatch(/^ui:\/\/sentientui\//);
-      expect(r.config.mimeType).toBe('text/html');
+      expect(r.config.mimeType).toBe(RESOURCE_MIME_TYPE);
       // The read callback returns the standalone HTML document.
       const result = await r.cb(new URL(r.uri));
-      expect(result.contents[0].mimeType).toBe('text/html');
+      expect(result.contents[0].mimeType).toBe(RESOURCE_MIME_TYPE);
       expect(result.contents[0].text).toContain('<!doctype html>');
     }
   });

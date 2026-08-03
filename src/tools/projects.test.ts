@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { ToolHandler } from './test-utils.js';
 import { ApiClient, ApiError } from '../api-client.js';
+import { apiErrorGuidance } from './common.js';
 import { registerProjectTools } from './projects.js';
 
 function makeServer() {
-  const tools: Record<string, { handler: Function }> = {};
+  const tools: Record<string, { handler: ToolHandler }> = {};
   return {
-    registerTool: vi.fn((name: string, _config: unknown, handler: Function) => {
+    registerTool: vi.fn((name: string, _config: unknown, handler: ToolHandler) => {
       tools[name] = { handler };
     }),
     tools,
@@ -109,6 +111,16 @@ describe('create_project', () => {
 
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toMatch(/account login/i);
+  });
+
+  it('surfaces the SINGLE shared guidance source for insufficient_scope (no divergent copy)', async () => {
+    vi.spyOn(client, 'post').mockRejectedValue(new ApiError(403, 'insufficient_scope'));
+
+    const result = await server.tools['create_project']!.handler({ name: 'My App' });
+
+    // Verbatim-equal to the shared mapper: create_project routes through the same
+    // withApiErrorGuidance path rather than re-implementing its own wording.
+    expect(result.content[0].text).toBe(apiErrorGuidance(new ApiError(403, 'insufficient_scope')));
   });
 
   it('maps project_limit_reached to upgrade guidance', async () => {

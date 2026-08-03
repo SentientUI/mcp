@@ -1,11 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
+import type { ToolHandler } from './test-utils.js';
 import { ApiClient } from '../api-client.js';
 import { registerLayoutTools } from './layout.js';
 
 function makeServer() {
-  const tools: Record<string, { handler: Function }> = {};
+  const tools: Record<string, { handler: ToolHandler }> = {};
   return {
-    registerTool: vi.fn((name: string, _config: unknown, handler: Function) => { tools[name] = { handler }; }),
+    registerTool: vi.fn((name: string, _config: unknown, handler: ToolHandler) => { tools[name] = { handler }; }),
     tools,
   };
 }
