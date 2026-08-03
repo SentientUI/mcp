@@ -10,9 +10,10 @@ const PLAN_GATE_GUIDANCE = {
 
 type Summary = {
   totals: { crawler: number; api: number; browser: number };
-  engines: Array<{ engine: string; count: number; sharePct: number; lastSeen: string; firstSeenInRange: boolean }>;
+  engines: Array<{ engine: string; intent: string; count: number; sharePct: number; lastSeen: string; firstSeenInRange: boolean }>;
   topPaths: Array<{ path: string; count: number; engines: number }>;
   daily: Array<{ day: string; crawler: number; api: number; browser: number }>;
+  intents: { user: number; search: number; training: number; other: number };
 };
 
 type Legibility = {
@@ -32,10 +33,13 @@ export function registerAgentTrafficTools(server: McpServer, client: ApiClient):
         totals: z.object({ crawler: z.number(), api: z.number(), browser: z.number() }),
         engines: z.array(
           z.object({
-            engine: z.string(), count: z.number(), sharePct: z.number(),
+            engine: z.string(), intent: z.string().describe('user | search | training | other'),
+            count: z.number(), sharePct: z.number(),
             lastSeen: z.string(), firstSeenInRange: z.boolean().describe('First observed within the queried period'),
           }),
         ),
+        intents: z.object({ user: z.number(), search: z.number(), training: z.number(), other: z.number() })
+          .describe('Crawler fetches by purpose: user = an assistant answering a real person live'),
         topPaths: z.array(z.object({ path: z.string(), count: z.number(), engines: z.number() })),
       },
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
@@ -43,7 +47,7 @@ export function registerAgentTrafficTools(server: McpServer, client: ApiClient):
     withApiErrorGuidance(async ({ projectId }: { projectId: string }) => {
       const id = encodeURIComponent(projectId);
       const s = await client.get<Summary>(`/projects/${id}/agent-activity/summary`);
-      const structuredContent = { totals: s.totals, engines: s.engines, topPaths: s.topPaths };
+      const structuredContent = { totals: s.totals, engines: s.engines, intents: s.intents, topPaths: s.topPaths };
 
       const total = s.totals.crawler + s.totals.api + s.totals.browser;
       if (total === 0) {
@@ -58,6 +62,7 @@ export function registerAgentTrafficTools(server: McpServer, client: ApiClient):
 
       const lines = [
         `Agent traffic: ${s.totals.crawler} crawler fetches, ${s.totals.api} agent API calls, ${s.totals.browser} agentic browser sessions.`,
+        `Live user fetches: ${s.intents.user} · Search index: ${s.intents.search} · Training: ${s.intents.training}${s.intents.other ? ` · Other: ${s.intents.other}` : ''} (a "live user fetch" = an AI assistant reading your site to answer a real person).`,
         '',
         'Engines:',
         ...s.engines.map((e) => `- ${e.engine}: ${e.count} fetches (${e.sharePct}%)${e.firstSeenInRange ? ' — NEW this period' : ''}`),

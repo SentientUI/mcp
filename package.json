@@ -1,6 +1,6 @@
 {
   "name": "@sentientui/mcp",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "MCP server for SentientUI — exposes project data and actions to AI agents",
   "license": "MIT",
   "homepage": "https://sentient-ui.com",

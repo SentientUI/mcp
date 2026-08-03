@@ -23,14 +23,17 @@ describe('get_agent_traffic', () => {
   it('summarizes engines and paths', async () => {
     const server = setup(() => ({
       totals: { crawler: 10, api: 2, browser: 1 },
-      engines: [{ engine: 'GPTBot', count: 8, sharePct: 80, lastSeen: '2026-08-02T00:00:00Z', firstSeenInRange: false }],
+      engines: [{ engine: 'GPTBot', intent: 'training', count: 8, sharePct: 80, lastSeen: '2026-08-02T00:00:00Z', firstSeenInRange: false }],
+      intents: { user: 1, search: 0, training: 8, other: 0 },
       topPaths: [{ path: '/pricing', count: 6, engines: 1 }],
       daily: [],
     }));
     const res = await server.tools['get_agent_traffic']!.handler({ projectId: 'p1' });
     expect(res.content[0].text).toContain('GPTBot');
     expect(res.content[0].text).toContain('/pricing');
+    expect(res.content[0].text).toContain('Live user fetches: 1');
     expect((res.structuredContent as { totals: unknown }).totals).toEqual({ crawler: 10, api: 2, browser: 1 });
+    expect((res.structuredContent as { intents: unknown }).intents).toEqual({ user: 1, search: 0, training: 8, other: 0 });
   });
 
   it('shows an empty state with the middleware hint', async () => {
