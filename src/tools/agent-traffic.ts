@@ -17,7 +17,13 @@ type Summary = {
 };
 
 type Legibility = {
-  paths: Array<{ path: string; score: number; checks: { price: boolean; name: boolean; positioning: boolean; cta: boolean; notes: string[] }; lastChecked: string }>;
+  paths: Array<{
+    path: string;
+    score: number;
+    checks: { price: boolean; name: boolean; positioning: boolean; cta: boolean; notes: string[] };
+    fixes?: Array<{ check: string; advice: string; snippet?: string }>;
+    lastChecked: string;
+  }>;
   emptyBlocks: Array<{ block: string; variant: string; occurrences: number }>;
 };
 
@@ -90,6 +96,9 @@ export function registerAgentTrafficTools(server: McpServer, client: ApiClient):
               price: z.boolean(), name: z.boolean(), positioning: z.boolean(), cta: z.boolean(),
               notes: z.array(z.string()),
             }),
+            fixes: z.array(z.object({
+              check: z.string(), advice: z.string(), snippet: z.string().optional(),
+            })).optional().describe('Concrete Next.js remediation per failing check'),
             lastChecked: z.string(),
           }),
         ),
@@ -115,7 +124,11 @@ export function registerAgentTrafficTools(server: McpServer, client: ApiClient):
           const failed = (['price', 'name', 'positioning', 'cta'] as const).filter((k) => !p.checks[k]);
           return `- ${p.path}: ${p.score}/100${failed.length ? ` — missing: ${failed.join(', ')}` : ' — fully legible'}`;
         }),
-        ...l.paths.flatMap((p) => p.checks.notes.map((n) => `  fix (${p.path}): ${n}`)),
+        ...l.paths.flatMap((p) =>
+          p.fixes?.length
+            ? p.fixes.map((f) => `  fix (${p.path}): ${f.advice}`)
+            : p.checks.notes.map((n) => `  fix (${p.path}): ${n}`),
+        ),
       ];
       if (l.emptyBlocks.length > 0) {
         lines.push('', 'Agent API blocks served without agent data (add agentDataByVariant):');

@@ -74,4 +74,20 @@ describe('get_agent_legibility', () => {
     const res = await server.tools['get_agent_legibility']!.handler({ projectId: 'p1' });
     expect(res.content[0].text).toContain('No legibility results yet');
   });
+
+  it('prefers structured fixes over notes when the API provides them', async () => {
+    const server = setup(() => ({
+      paths: [{
+        path: '/pricing', score: 75,
+        checks: { price: false, name: true, positioning: true, cta: true, notes: ['No price found in the server HTML.'] },
+        fixes: [{ check: 'price', advice: 'Render pricing in the server HTML — keep the pricing table in a Server Component.' }],
+        lastChecked: '2026-08-03T00:00:00Z',
+      }],
+      emptyBlocks: [],
+    }));
+    const res = await server.tools['get_agent_legibility']!.handler({ projectId: 'p1' });
+    const text = res.content[0].text as string;
+    expect(text).toContain('fix (/pricing): Render pricing in the server HTML');
+    expect(text).not.toContain('No price found');
+  });
 });
