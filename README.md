@@ -93,6 +93,7 @@ A sandboxed demo token is provisioned automatically — 10 calls/month, read-onl
 | `refresh_insights` | Trigger fresh AI insight generation |
 | `get_persona_breakdown` | Visitor cluster distribution with reliability scores |
 | `get_goal_funnel` | Goal hit counts and conversion rates per variant |
+| `list_goals` | Defined goals (id, role, event, status) — includes goals with no conversions yet, so agents can wire a dashboard-defined goal into code |
 | `list_guardrail_events` | Variants auto-paused by the guardrail (last 24h) |
 | `get_layout_stats` | Per-persona section layout rankings and reward weights |
 | `get_integration_guide` | SentientUI adaptive-ladder setup guide (static — same for every project) |

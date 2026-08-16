@@ -31,6 +31,7 @@ describe('createMcpServer', () => {
       'get_insights',
       'get_persona_breakdown',
       'get_goal_funnel',
+      'list_goals',
       'list_guardrail_events',
       'get_layout_stats',
       'get_variant_brief',
