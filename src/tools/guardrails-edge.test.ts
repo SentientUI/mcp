@@ -11,12 +11,16 @@ function makeServer() {
   };
 }
 
-async function run(data: unknown) {
+async function runFull(data: unknown) {
   const client = new ApiClient({ apiKey: 'sk_test' });
   vi.spyOn(client, 'get').mockResolvedValue(data as any);
   const server = makeServer();
   registerGuardrailTools(server as any, client);
-  const result = await server.tools['list_guardrail_events']!.handler({ projectId: 'p1' });
+  return server.tools['list_guardrail_events']!.handler({ projectId: 'p1' });
+}
+
+async function run(data: unknown) {
+  const result = await runFull(data);
   return result.content[0].text as string;
 }
 
@@ -55,5 +59,20 @@ describe('list_guardrail_events — rendering', () => {
   it('shows empty-state message when there are no events', async () => {
     const text = await run({ guardrailEvents: [] });
     expect(text).toContain('No active guardrail events in the last 24 hours.');
+  });
+
+  it('surfaces the protected funnel on funnel-guardrail pauses, defaulting to null', async () => {
+    const result = await runFull({
+      guardrailEvents: [
+        { componentId: 'hero', variantIds: ['v_b'], pausedAt: null, funnelId: 'checkout' },
+        { componentId: 'cta', variantIds: ['v_x'], pausedAt: null }, // older API — no funnelId
+      ],
+    });
+    const sc = result.structuredContent as { events: Array<{ funnelId: string | null }> };
+    expect(sc.events[0]!.funnelId).toBe('checkout');
+    expect(sc.events[1]!.funnelId).toBeNull();
+    const text = result.content[0].text as string;
+    expect(text).toContain('- hero: variants [v_b] paused (protecting the "checkout" funnel)');
+    expect(text).not.toContain('cta: variants [v_x] paused (protecting');
   });
 });

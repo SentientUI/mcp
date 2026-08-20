@@ -15,6 +15,7 @@ import { registerComponentTools } from './tools/components.js';
 import { registerInsightTools } from './tools/insights.js';
 import { registerPersonaTools } from './tools/personas.js';
 import { registerGoalTools } from './tools/goals.js';
+import { registerFunnelTools } from './tools/funnels.js';
 import { registerGuardrailTools } from './tools/guardrails.js';
 import { registerLayoutTools } from './tools/layout.js';
 import { registerVariantWriteTools } from './tools/variants.js';
@@ -53,6 +54,7 @@ export function createMcpServer(client: ApiClient): McpServer {
   registerInsightTools(server, client);
   registerPersonaTools(server, client);
   registerGoalTools(server, client);
+  registerFunnelTools(server, client);
   registerGuardrailTools(server, client);
   registerLayoutTools(server, client);
   registerVariantBriefTools(server, client);

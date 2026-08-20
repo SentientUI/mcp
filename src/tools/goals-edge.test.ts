@@ -12,17 +12,33 @@ function makeServer() {
 }
 
 async function run(data: unknown) {
+  return (await runFunnel(data)).content[0].text as string;
+}
+
+async function runFunnel(data: unknown) {
   const client = new ApiClient({ apiKey: 'sk_test' });
   vi.spyOn(client, 'get').mockResolvedValue(data as any);
   const server = makeServer();
   registerGoalTools(server as any, client);
-  const result = await server.tools['get_goal_funnel']!.handler({ projectId: 'p1' });
-  return result.content[0].text as string;
+  return server.tools['get_goal_funnel']!.handler({ projectId: 'p1' });
 }
 
 async function runListGoals(data: unknown) {
   const client = new ApiClient({ apiKey: 'sk_test' });
   vi.spyOn(client, 'get').mockResolvedValue(data as any);
+  const server = makeServer();
+  registerGoalTools(server as any, client);
+  return server.tools['list_goals']!.handler({ projectId: 'p1' });
+}
+
+// Path-keyed stub: a path with no entry rejects, like an API deployed before
+// that endpoint existed.
+async function runListGoalsRoutes(routes: Record<string, unknown>) {
+  const client = new ApiClient({ apiKey: 'sk_test' });
+  vi.spyOn(client, 'get').mockImplementation(async (path: string) => {
+    if (path in routes) return routes[path] as any;
+    throw new Error(`404 for ${path}`);
+  });
   const server = makeServer();
   registerGoalTools(server as any, client);
   return server.tools['list_goals']!.handler({ projectId: 'p1' });
@@ -70,6 +86,48 @@ describe('get_goal_funnel — formatting and nested variants', () => {
   });
 });
 
+describe('get_goal_funnel — revenue aggregates (spec §8)', () => {
+  it('surfaces revenue, AOV and revenue per session per goal, plus the project currency', async () => {
+    const result = await runFunnel({
+      currency: 'USD',
+      goals: [{
+        goalName: 'purchase', hits: 10, uniqueSessions: 8, pct: 0.08,
+        revenue: 1250.5, avgOrderValue: 138.94, revenuePerSession: 12.5, variants: [],
+      }],
+    });
+    const sc = result.structuredContent as {
+      currency: string;
+      goals: Array<{ revenue: number | null; avgOrderValue: number | null; revenuePerSession: number | null }>;
+    };
+    expect(sc.currency).toBe('USD');
+    expect(sc.goals[0]!.revenue).toBe(1250.5);
+    expect(sc.goals[0]!.avgOrderValue).toBe(138.94);
+    expect(sc.goals[0]!.revenuePerSession).toBe(12.5);
+    const text = result.content[0].text as string;
+    expect(text).toContain('1250.50 USD revenue');
+    expect(text).toContain('138.94 avg order');
+  });
+
+  it('valueless goals report null revenue fields and unchanged text', async () => {
+    const result = await runFunnel({
+      currency: 'USD',
+      goals: [{ goalName: 'signup', hits: 5, uniqueSessions: 5, pct: 0.5, revenue: null, variants: [] }],
+    });
+    const sc = result.structuredContent as { goals: Array<{ revenue: number | null }> };
+    expect(sc.goals[0]!.revenue).toBeNull();
+    expect(result.content[0].text as string).not.toContain('revenue');
+  });
+
+  it('tolerates an older API response with no currency/revenue fields', async () => {
+    const result = await runFunnel({
+      goals: [{ goalName: 'lead', hits: 1, uniqueSessions: 1, pct: 0.5, variants: [] }],
+    });
+    const sc = result.structuredContent as { currency: string; goals: Array<{ revenue: number | null }> };
+    expect(sc.currency).toBe('USD');
+    expect(sc.goals[0]!.revenue).toBeNull();
+  });
+});
+
 describe('list_goals — definitions including zero-conversion goals', () => {
   it('lists each goal with id, role, event, and display name, plus code-usage guidance', async () => {
     const result = await runListGoals({
@@ -84,10 +142,19 @@ describe('list_goals — definitions including zero-conversion goals', () => {
     expect(text).toContain("client.goal('<goalId>')");
     expect(result.structuredContent).toEqual({
       goals: [
-        { goalId: 'demo_requested', displayName: 'Demo requested', role: 'primary', event: 'click', urlPattern: null, status: 'active' },
-        { goalId: 'thanks_page', displayName: 'Reached thanks page', role: 'secondary', event: 'url_reached', urlPattern: '/thanks', status: 'active' },
+        { goalId: 'demo_requested', displayName: 'Demo requested', role: 'primary', event: 'click', urlPattern: null, status: 'active', defaultValue: null },
+        { goalId: 'thanks_page', displayName: 'Reached thanks page', role: 'secondary', event: 'url_reached', urlPattern: '/thanks', status: 'active', defaultValue: null },
       ],
+      warnings: [],
     });
+  });
+
+  it('reports each goal\'s declared worth (default_value) as a number', async () => {
+    const result = await runListGoals({
+      goals: [{ goal_id: 'demo_requested', display_name: 'Demo requested', role: 'primary', event: 'click', url_pattern: null, status: 'active', default_value: '500.00' }],
+    });
+    const sc = result.structuredContent as { goals: Array<{ defaultValue: number | null }> };
+    expect(sc.goals[0]!.defaultValue).toBe(500);
   });
 
   it('marks archived goals inline', async () => {
@@ -100,6 +167,29 @@ describe('list_goals — definitions including zero-conversion goals', () => {
   it('empty state points at the dashboard and chat, never claims goals are impossible', async () => {
     const result = await runListGoals({ goals: [] });
     expect(result.content[0].text as string).toContain('No goal definitions yet');
-    expect(result.structuredContent).toEqual({ goals: [] });
+    expect(result.structuredContent).toEqual({ goals: [], warnings: [] });
+  });
+
+  it('list_goals surfaces goal-name typo warnings', async () => {
+    const result = await runListGoalsRoutes({
+      '/projects/p1/goal-definitions': { goals: [
+        { goal_id: 'sign_up', display_name: 'Sign up', role: 'primary', event: 'click', url_pattern: null, status: 'active' },
+      ] },
+      '/projects/p1/goal-warnings': { warnings: [
+        { goalName: 'sing_up', suggestion: 'sign_up', firstSeen: '2026-08-17', conversions: 14 },
+      ] },
+    });
+    expect((result.structuredContent as { warnings: unknown }).warnings).toEqual([
+      { goalName: 'sing_up', suggestion: 'sign_up' },
+    ]);
+    expect(result.content[0].text as string).toContain('"sing_up" looks like a typo of "sign_up"');
+  });
+
+  it('list_goals tolerates an API without the warnings endpoint', async () => {
+    const result = await runListGoalsRoutes({
+      '/projects/p1/goal-definitions': { goals: [] },
+      // no '/goal-warnings' route → the stub rejects, like an older API
+    });
+    expect((result.structuredContent as { warnings: unknown }).warnings).toEqual([]);
   });
 });

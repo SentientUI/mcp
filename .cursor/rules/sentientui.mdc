@@ -1,0 +1,22 @@
+---
+description: How to use and develop the SentientUI MCP server
+alwaysApply: true
+---
+
+This repo is `@sentientui/mcp`, the MCP server for SentientUI (adaptive UI
+personalization — https://sentient-ui.com).
+
+Connecting an assistant to SentientUI:
+- Hosted: `https://api.sentient-ui.com/mcp` (Streamable HTTP + OAuth, no key).
+  Claude Code: `claude mcp add --transport http sentientui https://api.sentient-ui.com/mcp`.
+- Local: `npx @sentientui/mcp` with `SENTIENTUI_API_KEY=sk_...` (omit for demo mode).
+
+Tools read experiment data (variant performance, personas, goal funnels, insights,
+guardrail events) and manage projects/variants. See README.md for the full list.
+
+Developing this package:
+- `src/server.ts` builds the server; `src/tools/*` register tools; `src/api-client.ts`
+  calls the SentientUI management API.
+- `pnpm build` (tsup) · `pnpm test` (vitest) · `pnpm typecheck`.
+- No secrets belong in this repo. Every tool must map to a real management endpoint.
+- Don't rename a public tool without a changeset — clients depend on the names.

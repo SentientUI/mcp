@@ -17,6 +17,7 @@ export function registerGuardrailTools(server: McpServer, client: ApiClient): vo
               componentId: z.string(),
               variantIds: z.array(z.string()).describe('Variants paused by the guardrail'),
               pausedAt: z.string().nullable().describe('ISO timestamp the pause fired, or null'),
+              funnelId: z.string().nullable().describe('Set when the pause came from a funnel guardrail'),
             }),
           )
           .describe('Guardrail events in the last 24h (empty if none)'),
@@ -34,6 +35,7 @@ export function registerGuardrailTools(server: McpServer, client: ApiClient): vo
           componentId: string;
           variantIds: string[];
           pausedAt: string | null;
+          funnelId?: string | null;
         }>;
       }>(`/projects/${id}/guardrail-events`);
 
@@ -42,6 +44,7 @@ export function registerGuardrailTools(server: McpServer, client: ApiClient): vo
           componentId: e.componentId,
           variantIds: e.variantIds,
           pausedAt: e.pausedAt,
+          funnelId: e.funnelId ?? null,
         })),
       };
 
@@ -53,7 +56,7 @@ export function registerGuardrailTools(server: McpServer, client: ApiClient): vo
       }
 
       const lines = data.guardrailEvents.map((e) =>
-        `- ${e.componentId}: variants [${e.variantIds.join(', ')}] paused${e.pausedAt ? ` at ${e.pausedAt}` : ''}`
+        `- ${e.componentId}: variants [${e.variantIds.join(', ')}] paused${e.pausedAt ? ` at ${e.pausedAt}` : ''}${e.funnelId ? ` (protecting the "${e.funnelId}" funnel)` : ''}`
       );
 
       return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent };
