@@ -171,7 +171,7 @@ export function registerFunnelTools(server: McpServer, client: ApiClient): void 
       return {
         content: [{ type: 'text' as const, text: lines.join('\n') }],
         // Tolerate an API deployed before strict funnels existed.
-        structuredContent: { ...data, strictOrder: data.strictOrder ?? false },
+        structuredContent: { ...data, strictOrder: data.strictOrder ?? true },
       };
     }),
   );

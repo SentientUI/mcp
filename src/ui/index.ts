@@ -44,6 +44,17 @@ export function uiMeta(id: VizId): Record<string, unknown> {
   };
 }
 
+/**
+ * Every `ui://` resource this server registers. These templates are static HTML
+ * — no project data, no API call — so a host may read them before the user has
+ * authenticated. The remote /mcp endpoint uses this set to allow an
+ * unauthenticated `resources/read` for exactly these URIs (see
+ * apps/api/src/routes/mcp.ts): without it, `resources/list` advertised four
+ * resources that every reader got a 401 for, which reads to an agent as a
+ * server whose resources are all broken.
+ */
+export const PUBLIC_UI_RESOURCE_URIS: readonly string[] = Object.values(UI_TOOL_VIZ).map(uiResourceUri);
+
 /** Register the four `ui://` HTML resources on the server. */
 export function registerUiResources(server: McpServer): void {
   for (const id of Object.values(UI_TOOL_VIZ)) {

@@ -2,15 +2,25 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ApiClient } from '../api-client.js';
 import { uiMeta } from '../ui/index.js';
-import { projectIdSchema, withApiErrorGuidance } from './common.js';
+import {
+  projectIdSchema,
+  rangeInputSchema,
+  rangeQuery,
+  windowOutputSchema,
+  windowLine,
+  withApiErrorGuidance,
+  type RangeArgs,
+} from './common.js';
 
 export function registerComponentTools(server: McpServer, client: ApiClient): void {
   server.registerTool(
     'list_components',
     {
       title: 'List components',
-      description: 'List all adaptive components in a project with variant counts and impression totals.',
-      inputSchema: { projectId: projectIdSchema },
+      description:
+        'List all adaptive components in a project with variant counts and impression totals. ' +
+        'Counts cover all retained data by default; pass range or from/to for a window.',
+      inputSchema: { projectId: projectIdSchema, ...rangeInputSchema('all') },
       outputSchema: {
         components: z
           .array(
@@ -22,6 +32,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
             }),
           )
           .describe('Adaptive components in the project (empty if none)'),
+        window: windowOutputSchema,
       },
       annotations: {
         readOnlyHint: true,
@@ -29,17 +40,18 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
         openWorldHint: false,
       },
     },
-    withApiErrorGuidance(async ({ projectId }) => {
+    withApiErrorGuidance(async ({ projectId, range, from, to }: { projectId: string } & RangeArgs) => {
       const id = encodeURIComponent(projectId);
       // The mgmt API returns a paginated envelope: { components, total, page, limit }.
-      const { components } = await client.get<{
+      const { components, window } = await client.get<{
         components: Array<{
           component_id: string;
           total_impressions: number;
           total_conversions: number;
           variants: Array<{ variant_id: string }>;
         }>;
-      }>(`/projects/${id}/components`);
+        window?: NonNullable<z.infer<typeof windowOutputSchema>>;
+      }>(`/projects/${id}/components${rangeQuery({ range, from, to })}`);
 
       const structuredContent = {
         components: components.map((c) => ({
@@ -48,6 +60,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
           impressions: c.total_impressions,
           conversions: c.total_conversions,
         })),
+        window,
       };
 
       if (!components.length) {
@@ -69,21 +82,24 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
     'get_variant_performance',
     {
       title: 'Variant performance',
-      description: 'Get CVR and momentum for all variants in a project over the last 7 days vs prior 7 days.',
-      inputSchema: { projectId: projectIdSchema },
+      description:
+        'Get CVR and momentum for all variants in a project over the selected window vs the ' +
+        'immediately-preceding window of equal length (default: last 7 calendar days vs prior 7).',
+      inputSchema: { projectId: projectIdSchema, ...rangeInputSchema('7d') },
       _meta: uiMeta('variant-performance'),
       outputSchema: {
         variants: z
           .array(
             z.object({
               variantId: z.string(),
-              currentCvr: z.number().describe('Conversion rate over the last 7 days (0-1)'),
-              priorCvr: z.number().describe('Conversion rate over the prior 7 days (0-1)'),
+              currentCvr: z.number().describe('Conversion rate over the selected window (0-1)'),
+              priorCvr: z.number().describe('Conversion rate over the preceding window (0-1)'),
               deltaPp: z.number().describe('Change in percentage points'),
               momentum: z.string().describe('Momentum direction: gaining, losing, or stable'),
             }),
           )
           .describe('Per-variant performance (empty if no data yet)'),
+        window: windowOutputSchema,
       },
       annotations: {
         readOnlyHint: true,
@@ -91,7 +107,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
         openWorldHint: false,
       },
     },
-    withApiErrorGuidance(async ({ projectId }) => {
+    withApiErrorGuidance(async ({ projectId, range, from, to }: { projectId: string } & RangeArgs) => {
       const id = encodeURIComponent(projectId);
       const data = await client.get<{
         cvr: Array<{
@@ -104,7 +120,8 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
           variantId: string;
           direction: string;
         }>;
-      }>(`/projects/${id}/trends`);
+        window?: NonNullable<z.infer<typeof windowOutputSchema>>;
+      }>(`/projects/${id}/trends${rangeQuery({ range, from, to })}`);
 
       const momentumMap = new Map((data.momentum ?? []).map((m) => [m.variantId, m.direction]));
       const structuredContent = {
@@ -115,6 +132,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
           deltaPp: v.deltaPp,
           momentum: momentumMap.get(v.variantId) ?? 'stable',
         })),
+        window: data.window,
       };
 
       if (!data.cvr?.length) {
@@ -125,9 +143,11 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
         };
       }
 
-      const text = data.cvr.map((v) =>
+      const lines = data.cvr.map((v) =>
         `- ${v.variantId}: CVR ${(v.currentCvr * 100).toFixed(2)}% (prior ${(v.priorCvr * 100).toFixed(2)}%, ${v.deltaPp > 0 ? '+' : ''}${v.deltaPp.toFixed(1)} pp, ${momentumMap.get(v.variantId) ?? 'stable'})`
-      ).join('\n');
+      );
+      const win = windowLine(data.window);
+      const text = (win ? [win, ...lines] : lines).join('\n');
 
       return { content: [{ type: 'text' as const, text }], structuredContent, _meta: uiMeta('variant-performance') };
     }),

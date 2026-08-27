@@ -33,7 +33,7 @@ Server keys start with `sk_` — required for the management API. Public keys (`
 | `create_project` | Onboard a new user: creates a project + returns its `pk_` key. Needs an account login (OAuth) — refuses `sk_` project keys and demo tokens. Follow with `get_integration_guide` |
 | `get_project_stats` | Health status + 24h event/session volume |
 | `list_components` | Components + variant counts + impression totals |
-| `get_variant_performance` | CVR 7d vs prior 7d + momentum direction |
+| `get_variant_performance` | CVR current vs prior window + momentum (range/from/to params; default 7d) |
 | `get_persona_breakdown` | Cluster distribution + avg reliability per cluster |
 | `get_goal_funnel` | Goal hit counts + per-variant completion rates |
 | `list_guardrail_events` | Auto-paused variants (last 24h) |

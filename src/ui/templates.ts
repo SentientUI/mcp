@@ -156,7 +156,11 @@ const RENDER_JS: Record<VizId, string> = {
   'variant-performance': `
     window.__render = function(data){
       var variants = (data && data.variants) || [];
-      el('sub').textContent = variants.length + ' variant' + (variants.length === 1 ? '' : 's') + ' · conversion, last 7 days vs prior 7';
+      var winText = 'current vs prior period';
+      if (data && data.window && data.window.start && data.window.end) {
+        winText = String(data.window.start).slice(0, 10) + ' to ' + String(data.window.end).slice(0, 10) + ' vs prior period';
+      }
+      el('sub').textContent = variants.length + ' variant' + (variants.length === 1 ? '' : 's') + ' · conversion, ' + winText;
       if (!variants.length) { showEmpty('No variant data available yet.'); return; }
       var max = variants.reduce(function(m,v){ return Math.max(m, v.currentCvr || 0); }, 0) || 1;
       var sorted = variants.slice().sort(function(a,b){ return (b.currentCvr||0) - (a.currentCvr||0); });

@@ -61,14 +61,16 @@ describe('get_funnel_report', () => {
     expect(text).toContain('never recorded');
   });
 
-  it('passes strictOrder through and defaults it to false on an older API', async () => {
-    const strictServer = setup({ ...REPORT, strictOrder: true });
-    const strictRes = await strictServer.tools['get_funnel_report']!.handler({ projectId: 'p1', funnelId: 'checkout' });
-    expect((strictRes.structuredContent as { strictOrder: boolean }).strictOrder).toBe(true);
+  it('passes strictOrder through, and an absent value reads as sequence counting', async () => {
+    const anyOrderServer = setup({ ...REPORT, strictOrder: false });
+    const anyOrderRes = await anyOrderServer.tools['get_funnel_report']!.handler({ projectId: 'p1', funnelId: 'checkout' });
+    expect((anyOrderRes.structuredContent as { strictOrder: boolean }).strictOrder).toBe(false);
 
+    // Sequence counting is the default (migration 107), so an API that omits
+    // the field is reporting a sequence-counted funnel, not an any-order one.
     const olderServer = setup(REPORT); // no strictOrder field in the response
     const olderRes = await olderServer.tools['get_funnel_report']!.handler({ projectId: 'p1', funnelId: 'checkout' });
-    expect((olderRes.structuredContent as { strictOrder: boolean }).strictOrder).toBe(false);
+    expect((olderRes.structuredContent as { strictOrder: boolean }).strictOrder).toBe(true);
   });
 });
 

@@ -88,11 +88,11 @@ A sandboxed demo token is provisioned automatically — 10 calls/month, read-onl
 | `create_project` | Create a new project and return its `pk_` public key (account login required — not usable with an `sk_` project key or demo token) |
 | `get_project_stats` | Events, sessions, agent calls, and health status |
 | `list_components` | All adaptive components with variant counts |
-| `get_variant_performance` | CVR, momentum, and impressions per variant (7d vs prior 7d) |
+| `get_variant_performance` | CVR, momentum, and impressions per variant (windowed: range 7d/30d/90d/all or from/to; default 7d vs prior 7d) |
 | `get_insights` | AI-generated narrator observations and advisor recommendations |
 | `refresh_insights` | Trigger fresh AI insight generation |
 | `get_persona_breakdown` | Visitor cluster distribution with reliability scores |
-| `get_goal_funnel` | Goal hit counts and conversion rates per variant |
+| `get_goal_funnel` | Goal hit counts and conversion rates per variant (windowed; default 30d) |
 | `list_goals` | Defined goals (id, role, event, status) — includes goals with no conversions yet, so agents can wire a dashboard-defined goal into code |
 | `list_guardrail_events` | Variants auto-paused by the guardrail (last 24h) |
 | `get_layout_stats` | Per-persona section layout rankings and reward weights |

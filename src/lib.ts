@@ -4,3 +4,6 @@
 // this must never start a server or touch argv (that's src/index.ts's job).
 export { createMcpServer } from './server.js';
 export { ApiClient, ApiError } from './api-client.js';
+// The static `ui://` template URIs, so a host embedding this registry (the
+// remote /mcp endpoint) can allow reading them without a bearer token.
+export { PUBLIC_UI_RESOURCE_URIS } from './ui/index.js';

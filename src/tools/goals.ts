@@ -2,15 +2,26 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ApiClient } from '../api-client.js';
 import { uiMeta } from '../ui/index.js';
-import { projectIdSchema, withApiErrorGuidance } from './common.js';
+import {
+  projectIdSchema,
+  rangeInputSchema,
+  rangeQuery,
+  windowOutputSchema,
+  windowLine,
+  withApiErrorGuidance,
+  type RangeArgs,
+} from './common.js';
 
 export function registerGoalTools(server: McpServer, client: ApiClient): void {
   server.registerTool(
     'get_goal_funnel',
     {
       title: 'Goal funnel',
-      description: 'Get goal hit counts, unique-session conversion rates, and per-variant breakdown. This is a flat per-goal list — for multi-step funnel drop-off, use get_funnel_report.',
-      inputSchema: { projectId: projectIdSchema },
+      description:
+        'Get goal hit counts, unique-session conversion rates, and per-variant breakdown ' +
+        '(default window: last 30 calendar days). This is a flat per-goal list — for multi-step ' +
+        'funnel drop-off, use get_funnel_report.',
+      inputSchema: { projectId: projectIdSchema, ...rangeInputSchema('30d') },
       _meta: uiMeta('goal-funnel'),
       outputSchema: {
         currency: z.string().describe('Project display currency (ISO-4217) for the revenue fields'),
@@ -36,6 +47,7 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
             }),
           )
           .describe('Configured goals (empty if none)'),
+        window: windowOutputSchema,
       },
       annotations: {
         readOnlyHint: true,
@@ -43,7 +55,7 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
         openWorldHint: false,
       },
     },
-    withApiErrorGuidance(async ({ projectId }) => {
+    withApiErrorGuidance(async ({ projectId, range, from, to }: { projectId: string } & RangeArgs) => {
       const id = encodeURIComponent(projectId);
       const data = await client.get<{
         currency?: string;
@@ -57,11 +69,13 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
           revenuePerSession?: number | null;
           variants: Array<{ componentId: string; variantId: string; completionRate: number }>;
         }>;
-      }>(`/projects/${id}/goals`);
+        window?: NonNullable<z.infer<typeof windowOutputSchema>>;
+      }>(`/projects/${id}/goals${rangeQuery({ range, from, to })}`);
 
       // ?? null tolerance: an API deployed before revenue goals sends none of
       // these fields, and the tool must keep working against it.
       const structuredContent = {
+        window: data.window,
         currency: data.currency ?? 'USD',
         goals: data.goals.map((g) => ({
           goalName: g.goalName,
@@ -88,6 +102,7 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
       }
 
       const currency = data.currency ?? 'USD';
+      const win = windowLine(data.window);
       const lines = data.goals.flatMap((g) => [
         `${g.goalName}: ${g.hits} hits, ${g.uniqueSessions} unique sessions, ${(g.pct * 100).toFixed(1)}% conversion` +
           (g.revenue != null
@@ -97,7 +112,8 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
         '',
       ]);
 
-      return { content: [{ type: 'text' as const, text: lines.join('\n').trim() }], structuredContent, _meta: uiMeta('goal-funnel') };
+      const text = (win ? [win, '', ...lines] : lines).join('\n').trim();
+      return { content: [{ type: 'text' as const, text }], structuredContent, _meta: uiMeta('goal-funnel') };
     }),
   );
 

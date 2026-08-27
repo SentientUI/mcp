@@ -33,8 +33,15 @@ export function registerAgentTrafficTools(server: McpServer, client: ApiClient):
     {
       title: 'Agent traffic',
       description:
-        'Which AI agents and crawlers are reading this site: totals by type (passive crawlers, agentic browsers, agent API calls), engine breakdown, and the paths they fetch most. Agent traffic is tracked separately and never counted in conversion rate.',
-      inputSchema: { projectId: projectIdSchema },
+        'Which AI agents and crawlers are reading this site: totals by type (passive crawlers, agentic browsers, agent API calls), engine breakdown, and the paths they fetch most. Defaults to the last 30 days; pass from/to for a custom period (agent logs are retained 30 days on Free/Starter, 90 on Growth+). Agent traffic is tracked separately and never counted in conversion rate.',
+      inputSchema: {
+        projectId: projectIdSchema,
+        from: z
+          .string()
+          .optional()
+          .describe('Period start (ISO 8601 date or timestamp). Defaults to 30 days ago.'),
+        to: z.string().optional().describe('Period end (ISO 8601 date or timestamp). Defaults to now.'),
+      },
       outputSchema: {
         totals: z.object({ crawler: z.number(), api: z.number(), browser: z.number() }),
         engines: z.array(
@@ -50,9 +57,14 @@ export function registerAgentTrafficTools(server: McpServer, client: ApiClient):
       },
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
     },
-    withApiErrorGuidance(async ({ projectId }: { projectId: string }) => {
+    withApiErrorGuidance(async ({ projectId, from, to }: { projectId: string; from?: string; to?: string }) => {
       const id = encodeURIComponent(projectId);
-      const s = await client.get<Summary>(`/projects/${id}/agent-activity/summary`);
+      const qs = new URLSearchParams();
+      if (from) qs.set('from', from);
+      if (to) qs.set('to', to);
+      const s = await client.get<Summary>(
+        `/projects/${id}/agent-activity/summary${qs.size > 0 ? `?${qs.toString()}` : ''}`,
+      );
       const structuredContent = { totals: s.totals, engines: s.engines, intents: s.intents, topPaths: s.topPaths };
 
       const total = s.totals.crawler + s.totals.api + s.totals.browser;
