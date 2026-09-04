@@ -245,7 +245,7 @@ describe('list_guardrail_events', () => {
     const server = makeServer();
     registerGuardrailTools(server as any, client);
     const result = await server.tools['list_guardrail_events']!.handler({ projectId: 'p1' });
-    expect(result.content[0].text).toContain('No active guardrail events');
+    expect(result.content[0].text).toContain('No variants currently paused by a guardrail.');
   });
 });
 

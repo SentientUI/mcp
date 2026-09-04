@@ -1,7 +1,15 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ApiClient } from '../api-client.js';
-import { projectIdSchema, withApiErrorGuidance } from './common.js';
+import {
+  projectIdSchema,
+  withApiErrorGuidance,
+  fetchAllComponents,
+  settled,
+  throwIfNotDegradable,
+  untrusted,
+  UNTRUSTED_FIELDS_NOTE,
+} from './common.js';
 
 /** Impressions on a component before its bandit posteriors are considered settled. */
 const GOAL_TARGET = 500;
@@ -101,20 +109,13 @@ function guidanceFor(dataState: DataState, contextType: string): string {
   }
 }
 
-async function settled<T>(p: Promise<T>): Promise<T | null> {
-  try {
-    return await p;
-  } catch {
-    return null;
-  }
-}
 
 export function registerVariantBriefTools(server: McpServer, client: ApiClient): void {
   server.registerTool(
     'get_variant_brief',
     {
       title: 'Variant brief',
-      description: 'Get an insight-driven brief for creating a new CODE-NATIVE variant of a component. Returns current variant performance, audience, insights, a data-sufficiency assessment (with a best-practice fallback when there is no data yet), and step-by-step instructions for writing the variant in the customer\'s code. Use this instead of create_variant when the variant will live in the codebase.',
+      description: 'Get an insight-driven brief for creating a new CODE-NATIVE variant of a component. Returns current variant performance, audience, insights, a data-sufficiency assessment (with a best-practice fallback when there is no data yet), and step-by-step instructions for writing the variant in the customer\'s code. Use this instead of create_variant when the variant will live in the codebase.' + UNTRUSTED_FIELDS_NOTE,
       inputSchema: {
         projectId: projectIdSchema,
         componentId: z.string().describe('The component ID to write a new variant for (matches <Adaptive id="...">).'),
@@ -136,19 +137,32 @@ export function registerVariantBriefTools(server: McpServer, client: ApiClient):
     withApiErrorGuidance(async ({ projectId, componentId }) => {
       const id = encodeURIComponent(projectId);
 
-      const [projects, componentsEnvelope, trends, portraits, insights] = await Promise.all([
+      const [projectsRes, componentsRes, trendsRes, portraitsRes, insightsRes] = await Promise.all([
         settled(client.get<ProjectRow[]>('/projects')),
-        // mgmt API returns a paginated envelope: { components, total, page, limit }.
-        settled(client.get<{ components: ComponentRow[] }>(`/projects/${id}/components`)),
+        // Paginated: the target component may live past page 1 (API default 50),
+        // so page until it is found — find()ing only the first page reported
+        // component #51 as "no data yet" and pushed the agent onto priors.
+        settled(fetchAllComponents<ComponentRow>(client, projectId, {
+          maxPages: 25,
+          foundWhen: (fetched) => fetched.some((c) => c.component_id === componentId),
+        })),
         settled(client.get<TrendsResponse>(`/projects/${id}/trends`)),
         settled(client.get<PortraitsResponse>(`/projects/${id}/portraits`)),
         settled(client.get<InsightsResponse>(`/projects/${id}/insights`)),
       ]);
+      // Never let an auth/access failure (or a total outage) degrade into a
+      // confident "no data yet — proceed with priors" brief.
+      throwIfNotDegradable([projectsRes, componentsRes, trendsRes, portraitsRes, insightsRes]);
+
+      const projects = projectsRes.ok ? projectsRes.value : null;
+      const trends = trendsRes.ok ? trendsRes.value : null;
+      const portraits = portraitsRes.ok ? portraitsRes.value : null;
+      const insights = insightsRes.ok ? insightsRes.value : null;
 
       const project = projects?.find((p) => p.id === projectId) ?? null;
       const contextType = project?.context_type ?? 'unknown';
 
-      const components = componentsEnvelope?.components ?? [];
+      const components = componentsRes.ok ? componentsRes.value.components : [];
       const component = components.find((c) => c.component_id === componentId) ?? null;
       const impressions = component?.total_impressions ?? 0;
       const conversions = component?.total_conversions ?? 0;
@@ -182,8 +196,10 @@ export function registerVariantBriefTools(server: McpServer, client: ApiClient):
         lines.push(
           `Component performance: ${impressions} impressions, ${conversions} conversions, ${componentCvr.toFixed(2)}% CVR.`,
         );
+        // Variant ids are visitor-mintable via the public ingest path — delimit
+        // them so a minted id can't inject lines into the brief (see untrusted()).
         lines.push(
-          `Existing variant IDs (do not reuse these): ${existingVariantIds.length ? existingVariantIds.join(', ') : '(none)'}`,
+          `Existing variant IDs (do not reuse these): ${existingVariantIds.length ? existingVariantIds.map((v) => untrusted(v)).join(', ') : '(none)'}`,
         );
         lines.push('');
       }
@@ -192,7 +208,7 @@ export function registerVariantBriefTools(server: McpServer, client: ApiClient):
         lines.push('Current variant performance (7d vs prior 7d):');
         for (const v of variantPerf) {
           lines.push(
-            `- ${v.variantId}: ${(v.currentCvr * 100).toFixed(2)}% CVR (${v.deltaPp > 0 ? '+' : ''}${v.deltaPp.toFixed(1)} pp, ${momentumMap.get(v.variantId) ?? 'stable'})`,
+            `- ${untrusted(v.variantId)}: ${(v.currentCvr * 100).toFixed(2)}% CVR (${v.deltaPp > 0 ? '+' : ''}${v.deltaPp.toFixed(1)} pp, ${momentumMap.get(v.variantId) ?? 'stable'})`,
           );
         }
         lines.push('');
@@ -202,7 +218,8 @@ export function registerVariantBriefTools(server: McpServer, client: ApiClient):
         lines.push(`Audience (${totalSessions} sessions):`);
         for (const c of clusters) {
           const share = totalSessions > 0 ? ((c.sessionCount / totalSessions) * 100).toFixed(0) : '0';
-          lines.push(`- ${c.label}: ${share}% of traffic (reliability ${(c.avgReliability * 100).toFixed(0)}%)`);
+          // Persona labels derive from visitor behaviour — same delimiting.
+          lines.push(`- ${untrusted(c.label)}: ${share}% of traffic (reliability ${(c.avgReliability * 100).toFixed(0)}%)`);
         }
         lines.push('');
       }

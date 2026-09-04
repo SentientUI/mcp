@@ -28,7 +28,7 @@ describe('get_persona_breakdown — percentage math', () => {
       totalSessions: 200,
     });
     expect(text).toContain('Total sessions: 200');
-    expect(text).toContain('- browsers: 75 sessions (37.5% of traffic, reliability 66%)');
+    expect(text).toContain('- `browsers`: 75 sessions (37.5% of traffic, reliability 66%)');
   });
 
   it('renders each cluster on its own line', async () => {
@@ -39,8 +39,8 @@ describe('get_persona_breakdown — percentage math', () => {
       ],
       totalSessions: 400,
     });
-    expect(text).toContain('- buyers: 100 sessions (25.0% of traffic, reliability 90%)');
-    expect(text).toContain('- lurkers: 300 sessions (75.0% of traffic, reliability 50%)');
+    expect(text).toContain('- `buyers`: 100 sessions (25.0% of traffic, reliability 90%)');
+    expect(text).toContain('- `lurkers`: 300 sessions (75.0% of traffic, reliability 50%)');
   });
 
   it('shows empty-state message when there are no clusters', async () => {
@@ -56,7 +56,7 @@ describe('get_persona_breakdown — totalSessions === 0 (divide-by-zero guard)',
       clusters: [{ label: 'ghost', sessionCount: 5, avgReliability: 0.4 }],
       totalSessions: 0,
     });
-    expect(text).toContain('- ghost: 5 sessions (0.0% of traffic, reliability 40%)');
+    expect(text).toContain('- `ghost`: 5 sessions (0.0% of traffic, reliability 40%)');
     expect(text).toContain('Total sessions: 0');
     expect(text).not.toContain('Infinity');
   });
@@ -66,7 +66,7 @@ describe('get_persona_breakdown — totalSessions === 0 (divide-by-zero guard)',
       clusters: [{ label: 'ghost', sessionCount: 0, avgReliability: 0.4 }],
       totalSessions: 0,
     });
-    expect(text).toContain('- ghost: 0 sessions (0.0% of traffic, reliability 40%)');
+    expect(text).toContain('- `ghost`: 0 sessions (0.0% of traffic, reliability 40%)');
     expect(text).not.toContain('NaN');
   });
 });

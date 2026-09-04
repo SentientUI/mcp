@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { ToolHandler } from './test-utils.js';
-import { ApiClient } from '../api-client.js';
+import { ApiClient, ApiError } from '../api-client.js';
 import { registerVariantBriefTools } from './variant-brief.js';
 
 function makeServer() {
@@ -29,7 +29,8 @@ function mockClient(client: ApiClient, responses: {
   vi.spyOn(client, 'get').mockImplementation((path: string) => {
     let value: unknown | Error | undefined;
     if (path === '/projects') value = responses.projects;
-    else if (path.endsWith('/components')) value = responses.components;
+    // The components fetch now paginates, so the path carries ?limit=...
+    else if (path.includes('/components')) value = responses.components;
     else if (path.endsWith('/trends')) value = responses.trends;
     else if (path.endsWith('/portraits')) value = responses.portraits;
     else if (path.endsWith('/insights')) value = responses.insights;
@@ -138,13 +139,13 @@ describe('get_variant_brief — formatting', () => {
 
   it('lists existing variant IDs and warns not to reuse them', async () => {
     const text = await run(sufficientResponses);
-    expect(text).toContain('Existing variant IDs (do not reuse these): v_a, v_b');
+    expect(text).toContain('Existing variant IDs (do not reuse these): `v_a`, `v_b`');
   });
 
   it('formats per-variant CVR (currentCvr*100) with signed delta pp and momentum', async () => {
     // currentCvr 0.12 -> 12.00%, deltaPp 2 -> +2.0 pp, momentum gaining
     const text = await run(sufficientResponses);
-    expect(text).toContain('- v_a: 12.00% CVR (+2.0 pp, gaining)');
+    expect(text).toContain('- `v_a`: 12.00% CVR (+2.0 pp, gaining)');
   });
 
   it('defaults momentum to "stable" when no momentum entry exists', async () => {
@@ -155,14 +156,14 @@ describe('get_variant_brief — formatting', () => {
         momentum: [],
       },
     });
-    expect(text).toContain('- v_a: 12.00% CVR (-1.0 pp, stable)');
+    expect(text).toContain('- `v_a`: 12.00% CVR (-1.0 pp, stable)');
   });
 
   it('formats audience share as sessionCount/totalSessions*100 to 0 decimals', async () => {
     // 150/300 = 50%, reliability 0.8 -> 80%
     const text = await run(sufficientResponses);
     expect(text).toContain('Audience (300 sessions):');
-    expect(text).toContain('- buyers: 50% of traffic (reliability 80%)');
+    expect(text).toContain('- `buyers`: 50% of traffic (reliability 80%)');
   });
 
   it('includes both narrator observations and advisor recommendations', async () => {
@@ -239,5 +240,70 @@ describe('get_variant_brief — partial API failures (settled)', () => {
     const text = await run({ ...sufficientResponses, insights: new Error('boom') });
     expect(text).toContain('Insights: none generated yet.');
     expect(text).toContain('## Data sufficiency: COLLECTING');
+  });
+});
+
+describe('get_variant_brief — auth/access failures are NOT "no data yet"', () => {
+  // settled() used to swallow every rejection, so a key without access to the
+  // project got a confident brief telling it to proceed with priors.
+  async function runFull(responses: Parameters<typeof mockClient>[1]) {
+    const client = new ApiClient({ apiKey: 'sk_test' });
+    mockClient(client, responses);
+    const server = makeServer();
+    registerVariantBriefTools(server as any, client);
+    return server.tools['get_variant_brief']!.handler({ projectId: PROJECT_ID, componentId: 'hero' });
+  }
+
+  it('surfaces a 403 on /components as an access error, never a priors brief', async () => {
+    const result = await runFull({ ...sufficientResponses, components: new ApiError(403, 'forbidden') });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/access denied/i);
+    expect(result.content[0].text).not.toContain('best-practice priors');
+  });
+
+  it('surfaces a 401 on any fetch as an auth error', async () => {
+    const result = await runFull({ ...sufficientResponses, insights: new ApiError(401, 'unauthorized') });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/authentication failed/i);
+  });
+
+  it('treats every fetch failing as an outage, not an empty project', async () => {
+    await expect(runFull({
+      projects: new Error('down'),
+      components: new Error('down'),
+      trends: new Error('down'),
+      portraits: new Error('down'),
+      insights: new Error('down'),
+    })).rejects.toThrow('down');
+  });
+});
+
+describe('get_variant_brief — component past the first page', () => {
+  it('follows nextCursor instead of reporting "no data yet" for component #51+', async () => {
+    const client = new ApiClient({ apiKey: 'sk_test' });
+    vi.spyOn(client, 'get').mockImplementation(async (path: string) => {
+      if (path === '/projects') return [{ id: PROJECT_ID, name: 'Shop', context_type: 'saas' }] as any;
+      if (path.includes('/components')) {
+        if (path.includes('cursor=')) {
+          return {
+            components: [{ component_id: 'late_hero', total_impressions: 700, total_conversions: 70, variants: [{ variant_id: 'v_a' }] }],
+            total: 2,
+            nextCursor: null,
+          } as any;
+        }
+        return {
+          components: [{ component_id: 'aaa', total_impressions: 1, total_conversions: 0, variants: [] }],
+          total: 2,
+          nextCursor: 'aaa',
+        } as any;
+      }
+      return {} as any;
+    });
+    const server = makeServer();
+    registerVariantBriefTools(server as any, client);
+    const result = await server.tools['get_variant_brief']!.handler({ projectId: PROJECT_ID, componentId: 'late_hero' });
+    const text = result.content[0].text as string;
+    expect(text).not.toContain('has reported data yet');
+    expect(text).toContain('700 impressions');
   });
 });

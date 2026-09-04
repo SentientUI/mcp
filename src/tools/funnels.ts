@@ -1,9 +1,26 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ApiClient } from '../api-client.js';
-import { projectIdSchema, withApiErrorGuidance } from './common.js';
+import { projectIdSchema, withApiErrorGuidance, untrusted, UNTRUSTED_FIELDS_NOTE } from './common.js';
 
 const funnelIdSchema = z.string().describe('Funnel slug (from list_funnels), e.g. "checkout"');
+
+
+/**
+ * A step can out-reach the one before it — visitors who completed the earlier
+ * step before the window opened, or (in any-order mode) skipped it entirely.
+ * CONTRACTS §8 requires that be rendered as a GAIN with the reason, never as a
+ * negative drop: "(-25% drop-off from previous)" reads as a broken number and
+ * an agent will repeat it as one. The dashboard already does this; this surface
+ * was missed.
+ */
+function stepChangeText(dropOffFromPrevious: number | null | undefined): string {
+  if (dropOffFromPrevious == null) return '';
+  if (dropOffFromPrevious < 0) {
+    return ` (${Math.round(-dropOffFromPrevious * 100)}% MORE than the previous step — some visitors reached it without the step before, or completed that step before this window)`;
+  }
+  return ` (${Math.round(dropOffFromPrevious * 100)}% drop-off from previous)`;
+}
 
 export function registerFunnelTools(server: McpServer, client: ApiClient): void {
   server.registerTool(
@@ -11,7 +28,7 @@ export function registerFunnelTools(server: McpServer, client: ApiClient): void 
     {
       title: 'List funnels',
       description:
-        'List the project\'s multi-step funnels — ordered goal steps plus the components serving them. Use get_funnel_report for a funnel\'s drop-off numbers. Reference a funnelId verbatim from code: <Adaptive funnel="<funnelId>">.',
+        'List the project\'s multi-step funnels — ordered goal steps plus the components serving them. Use get_funnel_report for a funnel\'s drop-off numbers. Reference a funnelId verbatim from code: <Adaptive funnel="<funnelId>">.' + UNTRUSTED_FIELDS_NOTE,
       inputSchema: { projectId: projectIdSchema },
       outputSchema: {
         funnels: z
@@ -81,8 +98,10 @@ export function registerFunnelTools(server: McpServer, client: ApiClient): void 
         };
       }
 
+      // Funnel steps reference goal ids, and goals are visitor-mintable via the
+      // public pk_ key — delimit every name (see untrusted()).
       const lines = structuredContent.funnels.map(
-        (f) => `${f.funnelId} (${f.status}) — ${f.displayName}: ${f.steps.map((s) => s.goalId).join(' → ')}`,
+        (f) => `${untrusted(f.funnelId)} (${f.status}) — ${untrusted(f.displayName)}: ${f.steps.map((s) => untrusted(s.goalId)).join(' → ')}`,
       );
       lines.push('', 'Reference a funnelId verbatim from code: <Adaptive funnel="<funnelId>">. Use get_funnel_report for drop-off numbers.');
       return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent };
@@ -94,7 +113,7 @@ export function registerFunnelTools(server: McpServer, client: ApiClient): void 
     {
       title: 'Funnel drop-off report',
       description:
-        'Per-step reach and drop-off for one funnel over its conversion window, with per-variant and audience splits per step, final-step revenue, and the holdout ("without optimization") comparison.',
+        'Per-step reach and drop-off for one funnel over its conversion window, with per-variant and audience splits per step, final-step revenue, and the holdout ("without optimization") comparison.' + UNTRUSTED_FIELDS_NOTE,
       inputSchema: { projectId: projectIdSchema, funnelId: funnelIdSchema },
       outputSchema: {
         funnelId: z.string(),
@@ -147,15 +166,17 @@ export function registerFunnelTools(server: McpServer, client: ApiClient): void 
         holdoutCompletion: { entered: number; reached: number } | null;
       }>(`/projects/${encodeURIComponent(projectId)}/funnels/${encodeURIComponent(funnelId)}/report`);
 
-      const lines: string[] = [`${data.displayName} — last ${data.windowDays} days`];
+      // Step names come from goal display names and variant/component ids from
+      // the public ingest path — all visitor-mintable, so delimit them.
+      const lines: string[] = [`${untrusted(data.displayName)} — last ${data.windowDays} days`];
       for (const s of data.steps) {
         lines.push(
-          `${s.stepIndex + 1}. ${s.displayName}: ${s.reached} reached` +
-          (s.dropOffFromPrevious != null ? ` (${Math.round(s.dropOffFromPrevious * 100)}% drop-off from previous)` : '') +
+          `${s.stepIndex + 1}. ${untrusted(s.displayName)}: ${s.reached} reached` +
+          stepChangeText(s.dropOffFromPrevious) +
           (s.neverFired ? ' [never recorded — check the goal name]' : ''),
         );
         for (const v of s.variants) {
-          lines.push(`   ${v.componentId}/${v.variantId}: ${v.reached}/${v.assigned} assigned sessions reached this step`);
+          lines.push(`   ${untrusted(v.componentId)}/${untrusted(v.variantId)}: ${v.reached}/${v.assigned} assigned sessions reached this step`);
         }
       }
       if (data.revenue != null) {

@@ -9,6 +9,8 @@ import {
   windowOutputSchema,
   windowLine,
   withApiErrorGuidance,
+  untrusted,
+  UNTRUSTED_FIELDS_NOTE,
   type RangeArgs,
 } from './common.js';
 
@@ -18,9 +20,13 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
     {
       title: 'Goal funnel',
       description:
-        'Get goal hit counts, unique-session conversion rates, and per-variant breakdown ' +
-        '(default window: last 30 calendar days). This is a flat per-goal list — for multi-step ' +
-        'funnel drop-off, use get_funnel_report.',
+        'Get goal hit counts and unique-session conversion rates for a window ' +
+        '(default: last 30 calendar days), plus a per-variant breakdown. NOTE: the per-variant ' +
+        'completionRate values are ALL-TIME (bounded only by plan retention), NOT windowed — a ' +
+        'variant completion rate needs the full assignment history as its denominator, so it does ' +
+        'not change when you narrow `range`, and retired components keep appearing in it. Only ' +
+        'hits/uniqueSessions/conversionRate/revenue respect the window. This is a flat per-goal ' +
+        'list — for multi-step funnel drop-off, use get_funnel_report.' + UNTRUSTED_FIELDS_NOTE,
       inputSchema: { projectId: projectIdSchema, ...rangeInputSchema('30d') },
       _meta: uiMeta('goal-funnel'),
       outputSchema: {
@@ -40,10 +46,18 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
                   z.object({
                     componentId: z.string(),
                     variantId: z.string(),
-                    completionRate: z.number().describe('Completion rate per assigned session (0-1)'),
+                    completionRate: z
+                      .number()
+                      .describe(
+                        'ALL-TIME completion rate per assigned session (0-1). Not windowed: ' +
+                          'unaffected by `range`/`from`/`to`, and bounded only by plan retention.',
+                      ),
                   }),
                 )
-                .describe('Per-variant breakdown'),
+                .describe(
+                  'Per-variant breakdown. ALL-TIME, not windowed — do not compare these against ' +
+                    'the windowed hits/conversionRate above, and expect retired components here.',
+                ),
             }),
           )
           .describe('Configured goals (empty if none)'),
@@ -103,16 +117,29 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
 
       const currency = data.currency ?? 'USD';
       const win = windowLine(data.window);
+      // Goal/component/variant names are visitor-mintable via the public pk_
+      // key (any 128-char string), and goalName used to render raw at line
+      // start — a goal named "signup\n<fake instructions>" read exactly like
+      // tool output. Delimit every one of them (see untrusted()).
       const lines = data.goals.flatMap((g) => [
-        `${g.goalName}: ${g.hits} hits, ${g.uniqueSessions} unique sessions, ${(g.pct * 100).toFixed(1)}% conversion` +
+        `${untrusted(g.goalName)}: ${g.hits} hits, ${g.uniqueSessions} unique sessions, ${(g.pct * 100).toFixed(1)}% conversion` +
           (g.revenue != null
             ? `, ${g.revenue.toFixed(2)} ${currency} revenue (${(g.avgOrderValue ?? 0).toFixed(2)} avg order)`
             : ''),
-        ...g.variants.map((v) => `  ${v.componentId}/${v.variantId}: ${(v.completionRate * 100).toFixed(1)}% per assigned session`),
+        // The per-variant rates come from an all-time query (analytics.ts
+        // query 2, deliberately unwindowed so the denominator is the full
+        // assignment history). The dashboard labels them; this text had not,
+        // so a narrowed `range` returned identical variant rates next to a
+        // windowed headline and read as a windowed comparison.
+        ...g.variants.map((v) => `  ${untrusted(v.componentId)}/${untrusted(v.variantId)}: ${(v.completionRate * 100).toFixed(1)}% per assigned session (all-time)`),
         '',
       ]);
 
-      const text = (win ? [win, '', ...lines] : lines).join('\n').trim();
+      const hasVariants = data.goals.some((g) => g.variants.length > 0);
+      const caveat = hasVariants
+        ? ['', 'Note: goal hits/conversion respect the window above; per-variant rates marked (all-time) do not.']
+        : [];
+      const text = (win ? [win, '', ...lines, ...caveat] : [...lines, ...caveat]).join('\n').trim();
       return { content: [{ type: 'text' as const, text }], structuredContent, _meta: uiMeta('goal-funnel') };
     }),
   );
@@ -122,7 +149,7 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
     {
       title: 'List goal definitions',
       description:
-        'List the project\'s defined goals — including ones with no conversions yet, which get_goal_funnel cannot see. Returns each goal\'s stable id, display name, role (primary/secondary/guardrail), event type, and status. Reference a goalId verbatim from code: client.goal(\'<goalId>\') or <Adaptive goal="<goalId>">.',
+        'List the project\'s defined goals — including ones with no conversions yet, which get_goal_funnel cannot see. Returns each goal\'s stable id, display name, role (primary/secondary/guardrail), event type, and status. Reference a goalId verbatim from code: client.goal(\'<goalId>\') or <Adaptive goal="<goalId>">.' + UNTRUSTED_FIELDS_NOTE,
       inputSchema: { projectId: projectIdSchema },
       outputSchema: {
         goals: z
@@ -198,11 +225,15 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
         };
       }
 
+      // goalId/displayName come from operator-defined rows, but the typo
+      // warnings quote goal names FIRED BY VISITORS — the exact injection
+      // vector (any pk_ holder mints a "goal" whose name is instructions).
+      // Delimit all of them; quotes alone don't stop a newline breakout.
       const lines = structuredContent.goals.map(
-        (g) => `${g.goalId} (${g.role}, ${g.event}${g.status === 'archived' ? ', archived' : ''}) — ${g.displayName}`,
+        (g) => `${untrusted(g.goalId)} (${g.role}, ${g.event}${g.status === 'archived' ? ', archived' : ''}) — ${untrusted(g.displayName)}`,
       );
       for (const w of warnings) {
-        lines.push(`⚠ "${w.goalName}" looks like a typo of "${w.suggestion}" — check before using it.`);
+        lines.push(`⚠ ${untrusted(w.goalName)} looks like a typo of ${untrusted(w.suggestion)} — check before using it.`);
       }
       lines.push('', 'Reference a goalId verbatim from code: client.goal(\'<goalId>\') or <Adaptive goal="<goalId>">.');
       return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent };

@@ -49,6 +49,19 @@ describe('get_agent_traffic', () => {
     expect(res.isError).toBe(true);
     expect(res.content[0].text).toContain('paid');
   });
+
+  // The query was gated on URLSearchParams.size, which is Node 19.8+ — on the
+  // Node 18 the README promises, `.size` is undefined and from/to silently
+  // vanished, so the default window answered as if it were the one asked for.
+  it('forwards from/to in the querystring', async () => {
+    const paths: string[] = [];
+    const server = setup((path) => {
+      paths.push(path);
+      return { totals: { crawler: 0, api: 0, browser: 0 }, engines: [], intents: { user: 0, search: 0, training: 0, other: 0 }, topPaths: [], daily: [] };
+    });
+    await server.tools['get_agent_traffic']!.handler({ projectId: 'p1', from: '2026-08-01', to: '2026-08-15' });
+    expect(paths[0]).toContain('?from=2026-08-01&to=2026-08-15');
+  });
 });
 
 describe('get_agent_legibility', () => {
@@ -87,7 +100,7 @@ describe('get_agent_legibility', () => {
     }));
     const res = await server.tools['get_agent_legibility']!.handler({ projectId: 'p1' });
     const text = res.content[0].text as string;
-    expect(text).toContain('fix (/pricing): Render pricing in the server HTML');
+    expect(text).toContain('fix (`/pricing`): Render pricing in the server HTML');
     expect(text).not.toContain('No price found');
   });
 });

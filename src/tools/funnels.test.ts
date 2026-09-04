@@ -39,8 +39,8 @@ describe('get_funnel_report', () => {
     const server = setup(REPORT);
     const res = await server.tools['get_funnel_report']!.handler({ projectId: 'p1', funnelId: 'checkout' });
     const text = res.content[0].text as string;
-    expect(text).toContain('Added to cart: 100 reached');
-    expect(text).toContain('Purchase: 20 reached (80% drop-off from previous)');
+    expect(text).toContain('`Added to cart`: 100 reached');
+    expect(text).toContain('`Purchase`: 20 reached (80% drop-off from previous)');
     expect(text).toContain('Revenue: 900.50 EUR');
     // 45.025 is 45.02499… in IEEE754, so toFixed(2) → 45.02.
     expect(text).toContain('45.02 EUR avg order');
@@ -92,7 +92,7 @@ describe('list_funnels', () => {
     });
     const res = await server.tools['list_funnels']!.handler({ projectId: 'p1' });
     const text = res.content[0].text as string;
-    expect(text).toContain('checkout (active) — Checkout: add_to_cart → purchase');
+    expect(text).toContain('`checkout` (active) — `Checkout`: `add_to_cart` → `purchase`');
     const structured = res.structuredContent as { funnels: Array<{ steps: Array<{ weight: number | null }> }> };
     expect(structured.funnels[0]!.steps.map((s) => s.weight)).toEqual([null, 1]);
   });

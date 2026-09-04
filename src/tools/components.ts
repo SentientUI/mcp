@@ -9,6 +9,9 @@ import {
   windowOutputSchema,
   windowLine,
   withApiErrorGuidance,
+  fetchAllComponents,
+  untrusted,
+  UNTRUSTED_FIELDS_NOTE,
   type RangeArgs,
 } from './common.js';
 
@@ -19,7 +22,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
       title: 'List components',
       description:
         'List all adaptive components in a project with variant counts and impression totals. ' +
-        'Counts cover all retained data by default; pass range or from/to for a window.',
+        'Counts cover all retained data by default; pass range or from/to for a window.' + UNTRUSTED_FIELDS_NOTE,
       inputSchema: { projectId: projectIdSchema, ...rangeInputSchema('all') },
       outputSchema: {
         components: z
@@ -32,6 +35,8 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
             }),
           )
           .describe('Adaptive components in the project (empty if none)'),
+        total: z.number().describe('Total components in the project — larger than the list when truncated'),
+        truncated: z.boolean().describe('True when the fetch cap was hit before listing every component'),
         window: windowOutputSchema,
       },
       annotations: {
@@ -41,17 +46,16 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
       },
     },
     withApiErrorGuidance(async ({ projectId, range, from, to }: { projectId: string } & RangeArgs) => {
-      const id = encodeURIComponent(projectId);
-      // The mgmt API returns a paginated envelope: { components, total, page, limit }.
-      const { components, window } = await client.get<{
-        components: Array<{
-          component_id: string;
-          total_impressions: number;
-          total_conversions: number;
-          variants: Array<{ variant_id: string }>;
-        }>;
-        window?: NonNullable<z.infer<typeof windowOutputSchema>>;
-      }>(`/projects/${id}/components${rangeQuery({ range, from, to })}`);
+      // "List all" used to destructure the first page of a paginated envelope
+      // (API default: 50/page), so a project's 51st component silently never
+      // existed as far as any agent could tell. Fetch every page (bounded) and
+      // say so when the bound cuts the list short.
+      const { components, total, window, truncated } = await fetchAllComponents<{
+        component_id: string;
+        total_impressions: number;
+        total_conversions: number;
+        variants: Array<{ variant_id: string }>;
+      }>(client, projectId, { rangeArgs: { range, from, to } });
 
       const structuredContent = {
         components: components.map((c) => ({
@@ -60,6 +64,8 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
           impressions: c.total_impressions,
           conversions: c.total_conversions,
         })),
+        total,
+        truncated,
         window,
       };
 
@@ -70,11 +76,16 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
         };
       }
 
-      const text = components.map((c) =>
-        `- ${c.component_id}: ${c.variants.length} variants, ${c.total_impressions} impressions, ${c.total_conversions} conversions`
-      ).join('\n');
+      // Component ids come from the page (and from the public ingest path), so
+      // they are visitor-mintable strings — delimit them (see untrusted()).
+      const lines = components.map((c) =>
+        `- ${untrusted(c.component_id)}: ${c.variants.length} variants, ${c.total_impressions} impressions, ${c.total_conversions} conversions`
+      );
+      if (truncated) {
+        lines.push(`Showing ${components.length} of ${total} components — fetch cap reached; the rest exist but are not listed here.`);
+      }
 
-      return { content: [{ type: 'text' as const, text }], structuredContent };
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent };
     }),
   );
 
@@ -84,7 +95,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
       title: 'Variant performance',
       description:
         'Get CVR and momentum for all variants in a project over the selected window vs the ' +
-        'immediately-preceding window of equal length (default: last 7 calendar days vs prior 7).',
+        'immediately-preceding window of equal length (default: last 7 calendar days vs prior 7).' + UNTRUSTED_FIELDS_NOTE,
       inputSchema: { projectId: projectIdSchema, ...rangeInputSchema('7d') },
       _meta: uiMeta('variant-performance'),
       outputSchema: {
@@ -143,8 +154,9 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
         };
       }
 
+      // Variant ids are visitor-mintable via the public ingest path — delimit.
       const lines = data.cvr.map((v) =>
-        `- ${v.variantId}: CVR ${(v.currentCvr * 100).toFixed(2)}% (prior ${(v.priorCvr * 100).toFixed(2)}%, ${v.deltaPp > 0 ? '+' : ''}${v.deltaPp.toFixed(1)} pp, ${momentumMap.get(v.variantId) ?? 'stable'})`
+        `- ${untrusted(v.variantId)}: CVR ${(v.currentCvr * 100).toFixed(2)}% (prior ${(v.priorCvr * 100).toFixed(2)}%, ${v.deltaPp > 0 ? '+' : ''}${v.deltaPp.toFixed(1)} pp, ${momentumMap.get(v.variantId) ?? 'stable'})`
       );
       const win = windowLine(data.window);
       const text = (win ? [win, ...lines] : lines).join('\n');

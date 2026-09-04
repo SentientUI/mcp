@@ -3,9 +3,15 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 const GUIDE = `# SentientUI integration guide — the adaptive ladder
 
-SentientUI adapts a site per visitor type (personas: buyer, researcher, deal_seeker, browser,
-unknown), learning from real conversions. Decisions are locked per session: Visit 1 learns,
-Visit 2 converts. Integrate one rung at a time.
+SentientUI adapts a site per visitor type (personas), learning from real conversions. Each
+project has its own persona vocabulary (dashboard -> Settings -> Personas; the default is
+buyer, researcher, deal_seeker, browser + unknown). Personas are inferred from behavior — or
+DECLARED by the app when it already knows the visitor's role: init({ persona: 'admin' }) /
+<AdaptiveProvider persona=...> / window.sentient.persona. Declared beats inferred and serves
+at full confidence; unrecognized values are ignored server-side and surfaced in the dashboard
+so the operator can add them. Keep persona a low-cardinality role slug — never a user id.
+Decisions are locked per session: Visit 1 learns, Visit 2 converts. Integrate one rung at a
+time.
 
 ## Setup (60 seconds, no account)
 
@@ -23,7 +29,8 @@ Visit 2 converts. Integrate one rung at a time.
 
 ## Rung 1 — Style (CSS only)
 
-Persona attributes on <html> (zero declaration):
+Persona attributes on <html> (zero declaration; the attribute carries the project's own
+vocabulary keys — declared or inferred):
 
     html[data-sentient-persona='deal_seeker'] .discount-banner { display: block; }
     html[data-sentient-confidence='low'] .discount-banner { display: none; }
@@ -60,7 +67,9 @@ form; <AdaptiveText> swaps dashboard-managed text.
     </AdaptiveGroup>
 
 Declared orders of keyed children only. Page-level: sections={[...]} on AdaptiveRoot +
-useLayoutOrder().
+useLayoutOrder(). Non-React sites: sections: ['#hero', '#pricing', '#faq'] (CSS selectors in
+the theme's natural order) in window.sentient — the snippet reorders those elements within
+their shared parent, and applies nothing if any selector drifts.
 
 ## Testing the integration
 

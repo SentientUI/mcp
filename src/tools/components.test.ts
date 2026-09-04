@@ -39,6 +39,44 @@ describe('list_components', () => {
     const result = await server.tools['list_components']!.handler({ projectId: 'p1' });
     expect(result.content[0].text).toContain('No components');
   });
+
+  // Destructuring only page one of the paginated envelope silently capped the
+  // "list ALL components" tool at the API default of 50 — component #51 never
+  // existed as far as any agent could tell.
+  it('follows nextCursor across pages and asks for the 200-per-page maximum', async () => {
+    const client = new ApiClient({ apiKey: 'sk_test' });
+    const mk = (id: string) => ({ component_id: id, total_impressions: 1, total_conversions: 0, variants: [] });
+    const get = vi.spyOn(client, 'get').mockImplementation(async (path: string) => {
+      if (path.includes('cursor=page1end')) {
+        return { components: [mk('zz_late')], total: 2, nextCursor: null } as any;
+      }
+      return { components: [mk('aa_early')], total: 2, nextCursor: 'page1end' } as any;
+    });
+    const server = makeServer();
+    registerComponentTools(server as any, client);
+    const result = await server.tools['list_components']!.handler({ projectId: 'p1' });
+    expect(result.content[0].text).toContain('zz_late');
+    expect((result.structuredContent as { components: unknown[] }).components).toHaveLength(2);
+    expect((result.structuredContent as { truncated: boolean }).truncated).toBe(false);
+    expect(get.mock.calls[0]![0]).toContain('limit=200');
+  });
+
+  it('says so when the page cap cuts the listing short', async () => {
+    const client = new ApiClient({ apiKey: 'sk_test' });
+    // Every page claims another page follows — the cap must kick in and be surfaced.
+    let n = 0;
+    vi.spyOn(client, 'get').mockImplementation(async () => ({
+      components: [{ component_id: `c${n}`, total_impressions: 1, total_conversions: 0, variants: [] }],
+      total: 5000,
+      nextCursor: `c${n++}`,
+    }) as any);
+    const server = makeServer();
+    registerComponentTools(server as any, client);
+    const result = await server.tools['list_components']!.handler({ projectId: 'p1' });
+    expect((result.structuredContent as { truncated: boolean }).truncated).toBe(true);
+    expect(result.content[0].text).toContain('fetch cap reached');
+    expect(result.content[0].text).toContain('5000');
+  });
 });
 
 describe('get_variant_performance', () => {

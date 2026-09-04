@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ApiClient } from '../api-client.js';
-import { projectIdSchema, withApiErrorGuidance } from './common.js';
+import { projectIdSchema, withApiErrorGuidance, untrusted, UNTRUSTED_FIELDS_NOTE } from './common.js';
 
 const PLAN_GATE_GUIDANCE = {
   agent_analytics_requires_paid_plan:
@@ -33,7 +33,7 @@ export function registerAgentTrafficTools(server: McpServer, client: ApiClient):
     {
       title: 'Agent traffic',
       description:
-        'Which AI agents and crawlers are reading this site: totals by type (passive crawlers, agentic browsers, agent API calls), engine breakdown, and the paths they fetch most. Defaults to the last 30 days; pass from/to for a custom period (agent logs are retained 30 days on Free/Starter, 90 on Growth+). Agent traffic is tracked separately and never counted in conversion rate.',
+        'Which AI agents and crawlers are reading this site: totals by type (passive crawlers, agentic browsers, agent API calls), engine breakdown, and the paths they fetch most. Defaults to the last 30 days; pass from/to for a custom period (agent logs are retained 30 days on Free/Starter, 90 on Growth+). Agent traffic is tracked separately and never counted in conversion rate.' + UNTRUSTED_FIELDS_NOTE,
       inputSchema: {
         projectId: projectIdSchema,
         from: z
@@ -62,8 +62,13 @@ export function registerAgentTrafficTools(server: McpServer, client: ApiClient):
       const qs = new URLSearchParams();
       if (from) qs.set('from', from);
       if (to) qs.set('to', to);
+      // Gate on toString(), not .size: URLSearchParams.size is Node 19.8+, and
+      // the README promises Node 18 — there `.size` is undefined, `undefined > 0`
+      // is false, and from/to were silently dropped (the default window answered
+      // as if it were the one asked for). Matches common.ts rangeQuery.
+      const query = qs.toString();
       const s = await client.get<Summary>(
-        `/projects/${id}/agent-activity/summary${qs.size > 0 ? `?${qs.toString()}` : ''}`,
+        `/projects/${id}/agent-activity/summary${query ? `?${query}` : ''}`,
       );
       const structuredContent = { totals: s.totals, engines: s.engines, intents: s.intents, topPaths: s.topPaths };
 
@@ -83,10 +88,13 @@ export function registerAgentTrafficTools(server: McpServer, client: ApiClient):
         `Live user fetches: ${s.intents.user} · Search index: ${s.intents.search} · Training: ${s.intents.training}${s.intents.other ? ` · Other: ${s.intents.other}` : ''} (a "live user fetch" = an AI assistant reading your site to answer a real person).`,
         '',
         'Engines:',
-        ...s.engines.map((e) => `- ${e.engine}: ${e.count} fetches (${e.sharePct}%)${e.firstSeenInRange ? ' — NEW this period' : ''}`),
+        // Engine labels and request paths are attacker-writable (any client can
+        // send any UA and fetch any URL) — delimit them so an injected path
+        // can't pose as a line of tool output.
+        ...s.engines.map((e) => `- ${untrusted(e.engine)}: ${e.count} fetches (${e.sharePct}%)${e.firstSeenInRange ? ' — NEW this period' : ''}`),
         '',
         'Most-fetched paths:',
-        ...s.topPaths.map((p) => `- ${p.path}: ${p.count} fetches by ${p.engines} engine(s)`),
+        ...s.topPaths.map((p) => `- ${untrusted(p.path)}: ${p.count} fetches by ${p.engines} engine(s)`),
       ];
       return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent };
     }, PLAN_GATE_GUIDANCE),
@@ -97,7 +105,7 @@ export function registerAgentTrafficTools(server: McpServer, client: ApiClient):
     {
       title: 'Agent legibility',
       description:
-        'Whether the pages AI agents actually read are machine-legible: per-path checks for price, product name, positioning, and CTA in the server HTML, plus agent API blocks served without agent data. Each failure comes with a concrete fix.',
+        'Whether the pages AI agents actually read are machine-legible: per-path checks for price, product name, positioning, and CTA in the server HTML, plus agent API blocks served without agent data. Each failure comes with a concrete fix.' + UNTRUSTED_FIELDS_NOTE,
       inputSchema: { projectId: projectIdSchema },
       outputSchema: {
         paths: z.array(
@@ -132,19 +140,21 @@ export function registerAgentTrafficTools(server: McpServer, client: ApiClient):
 
       const lines = [
         'Legibility of agent-read paths:',
+        // Paths are whatever crawlers fetched — attacker-writable — and block/
+        // variant names arrive via the public SDK; delimit all of them.
         ...l.paths.map((p) => {
           const failed = (['price', 'name', 'positioning', 'cta'] as const).filter((k) => !p.checks[k]);
-          return `- ${p.path}: ${p.score}/100${failed.length ? ` — missing: ${failed.join(', ')}` : ' — fully legible'}`;
+          return `- ${untrusted(p.path)}: ${p.score}/100${failed.length ? ` — missing: ${failed.join(', ')}` : ' — fully legible'}`;
         }),
         ...l.paths.flatMap((p) =>
           p.fixes?.length
-            ? p.fixes.map((f) => `  fix (${p.path}): ${f.advice}`)
-            : p.checks.notes.map((n) => `  fix (${p.path}): ${n}`),
+            ? p.fixes.map((f) => `  fix (${untrusted(p.path)}): ${f.advice}`)
+            : p.checks.notes.map((n) => `  fix (${untrusted(p.path)}): ${n}`),
         ),
       ];
       if (l.emptyBlocks.length > 0) {
         lines.push('', 'Agent API blocks served without agent data (add agentDataByVariant):');
-        lines.push(...l.emptyBlocks.map((b) => `- ${b.block} (variant ${b.variant}): ${b.occurrences} calls`));
+        lines.push(...l.emptyBlocks.map((b) => `- ${untrusted(b.block)} (variant ${untrusted(b.variant)}): ${b.occurrences} calls`));
       }
       return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent };
     }, PLAN_GATE_GUIDANCE),

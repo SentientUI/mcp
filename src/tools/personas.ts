@@ -2,14 +2,14 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ApiClient } from '../api-client.js';
 import { uiMeta } from '../ui/index.js';
-import { projectIdSchema, withApiErrorGuidance } from './common.js';
+import { projectIdSchema, withApiErrorGuidance, untrusted, UNTRUSTED_FIELDS_NOTE } from './common.js';
 
 export function registerPersonaTools(server: McpServer, client: ApiClient): void {
   server.registerTool(
     'get_persona_breakdown',
     {
       title: 'Persona breakdown',
-      description: 'Get the distribution of visitor persona clusters with session counts and reliability scores.',
+      description: 'Get the distribution of visitor persona clusters with session counts and reliability scores.' + UNTRUSTED_FIELDS_NOTE,
       inputSchema: { projectId: projectIdSchema },
       _meta: uiMeta('persona-breakdown'),
       outputSchema: {
@@ -60,9 +60,11 @@ export function registerPersonaTools(server: McpServer, client: ApiClient): void
         `Total sessions: ${data.totalSessions}`,
         '',
         'Clusters:',
+        // Cluster labels derive from visitor behaviour — delimit them so a
+        // crafted label can't pose as tool output (see untrusted()).
         ...data.clusters.map((c) => {
           const pct = data.totalSessions > 0 ? (c.sessionCount / data.totalSessions) * 100 : 0;
-          return `- ${c.label}: ${c.sessionCount} sessions (${pct.toFixed(1)}% of traffic, reliability ${(c.avgReliability * 100).toFixed(0)}%)`;
+          return `- ${untrusted(c.label)}: ${c.sessionCount} sessions (${pct.toFixed(1)}% of traffic, reliability ${(c.avgReliability * 100).toFixed(0)}%)`;
         }),
       ];
 

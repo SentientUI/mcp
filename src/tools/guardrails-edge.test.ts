@@ -31,7 +31,7 @@ describe('list_guardrail_events — rendering', () => {
         { componentId: 'hero', variantIds: ['v_b', 'v_c'], pausedAt: '2026-06-10T08:00:00Z' },
       ],
     });
-    expect(text).toContain('- hero: variants [v_b, v_c] paused at 2026-06-10T08:00:00Z');
+    expect(text).toContain('- `hero`: variants [`v_b`, `v_c`] paused at 2026-06-10T08:00:00Z');
   });
 
   it('omits the "at ..." suffix when pausedAt is null', async () => {
@@ -40,7 +40,7 @@ describe('list_guardrail_events — rendering', () => {
         { componentId: 'cta', variantIds: ['v_x'], pausedAt: null },
       ],
     });
-    expect(text).toContain('- cta: variants [v_x] paused');
+    expect(text).toContain('- `cta`: variants [`v_x`] paused');
     expect(text).not.toContain('paused at');
   });
 
@@ -52,13 +52,32 @@ describe('list_guardrail_events — rendering', () => {
       ],
     });
     expect(text.split('\n')).toHaveLength(2);
-    expect(text).toContain('- hero: variants [v_a] paused');
-    expect(text).toContain('- footer: variants [v_z] paused at 2026-06-11T00:00:00Z');
+    expect(text).toContain('- `hero`: variants [`v_a`] paused');
+    expect(text).toContain('- `footer`: variants [`v_z`] paused at 2026-06-11T00:00:00Z');
   });
 
   it('shows empty-state message when there are no events', async () => {
     const text = await run({ guardrailEvents: [] });
-    expect(text).toContain('No active guardrail events in the last 24 hours.');
+    expect(text).toContain('No variants currently paused by a guardrail.');
+  });
+
+  it('passes days through as a query param and scopes the empty-state message', async () => {
+    const client = new ApiClient({ apiKey: 'sk_test' });
+    const get = vi.spyOn(client, 'get').mockResolvedValue({ guardrailEvents: [] } as any);
+    const server = makeServer();
+    registerGuardrailTools(server as any, client);
+    const result = await server.tools['list_guardrail_events']!.handler({ projectId: 'p1', days: 7 });
+    expect(get).toHaveBeenCalledWith('/projects/p1/guardrail-events?days=7');
+    expect(result.content[0].text).toContain('No variants paused by a guardrail in the last 7 days.');
+  });
+
+  it('omits the query param when days is not given', async () => {
+    const client = new ApiClient({ apiKey: 'sk_test' });
+    const get = vi.spyOn(client, 'get').mockResolvedValue({ guardrailEvents: [] } as any);
+    const server = makeServer();
+    registerGuardrailTools(server as any, client);
+    await server.tools['list_guardrail_events']!.handler({ projectId: 'p1' });
+    expect(get).toHaveBeenCalledWith('/projects/p1/guardrail-events');
   });
 
   it('surfaces the protected funnel on funnel-guardrail pauses, defaulting to null', async () => {
@@ -72,7 +91,7 @@ describe('list_guardrail_events — rendering', () => {
     expect(sc.events[0]!.funnelId).toBe('checkout');
     expect(sc.events[1]!.funnelId).toBeNull();
     const text = result.content[0].text as string;
-    expect(text).toContain('- hero: variants [v_b] paused (protecting the "checkout" funnel)');
-    expect(text).not.toContain('cta: variants [v_x] paused (protecting');
+    expect(text).toContain('- `hero`: variants [`v_b`] paused (protecting the `checkout` funnel)');
+    expect(text).not.toContain('`cta`: variants [`v_x`] paused (protecting');
   });
 });

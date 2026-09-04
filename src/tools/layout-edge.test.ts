@@ -25,7 +25,7 @@ describe('get_layout_stats — rendering', () => {
     const text = await run([
       { persona: 'buyers', layoutOrder: ['pricing', 'hero', 'faq'], avgReward: 0.8, pulls: 120 },
     ]);
-    expect(text).toContain('- buyers: [pricing → hero → faq] (avg reward: 0.80, 120 pulls)');
+    expect(text).toContain('- `buyers`: [`pricing` → `hero` → `faq`] (avg reward: 0.80, 120 pulls)');
   });
 
   it('pads avgReward to two decimals (0.8 -> 0.80; 0.125.toFixed(2) -> 0.13 per V8)', async () => {
@@ -43,7 +43,7 @@ describe('get_layout_stats — rendering', () => {
       { persona: 'browsers', layoutOrder: ['faq', 'hero'], avgReward: 0.33, pulls: 7 },
     ]);
     expect(text.split('\n')).toHaveLength(2);
-    expect(text).toContain('- browsers: [faq → hero] (avg reward: 0.33, 7 pulls)');
+    expect(text).toContain('- `browsers`: [`faq` → `hero`] (avg reward: 0.33, 7 pulls)');
   });
 
   it('shows empty-state message when array is empty', async () => {

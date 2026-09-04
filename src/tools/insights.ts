@@ -38,6 +38,8 @@ const EMPTY_REASON_TEXT: Record<string, string> = {
   // The stale/never-ran texts name the remedy: an agent that is not told about
   // refresh_insights has no way to know it can fix this itself.
   job_never_ran: 'The analysis job has not run yet. Call refresh_insights to run it now.',
+  // No refresh_insights hint here: on a free plan that call just 403s.
+  plan_locked: 'AI analysis requires a Starter plan or higher. The measured findings are complete; only the written analysis is plan-gated.',
   job_stale: 'These numbers are out of date — the analysis job has not run recently. Call refresh_insights to regenerate them.',
   data_unavailable: 'The project data could not be read just now — nothing is wrong with the setup. Retry shortly.',
 };
