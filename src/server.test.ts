@@ -44,6 +44,9 @@ describe('createMcpServer', () => {
       'get_integration_guide',
       'get_agent_traffic',
       'get_agent_legibility',
+      'get_cell_matrix',
+      'get_cell_detail',
+      'generate_cell',
     ];
 
     for (const name of expected) {

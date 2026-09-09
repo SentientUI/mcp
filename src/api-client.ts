@@ -37,11 +37,15 @@ export class ApiClient {
   }
 
   private async request<T>(method: string, path: string, body?: unknown, isRetry = false): Promise<T> {
+    // content-type only when a body is actually sent: Fastify 400s a bodyless
+    // POST that declares application/json (FST_ERR_CTP_EMPTY_JSON_BODY), which
+    // made refresh_insights — the one bodyless POST here — fail as a bare
+    // "Bad Request" before its route ever ran.
     const res = await fetch(`${this.baseUrl}/v1/mgmt${path}`, {
       method,
       headers: {
         authorization: `Bearer ${this.apiKey}`,
-        'content-type': 'application/json',
+        ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });

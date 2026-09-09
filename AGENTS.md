@@ -43,6 +43,9 @@ Server keys start with `sk_` — required for the management API. Public keys (`
 | `get_variant_brief` | **Start here to optimize a component.** Insight-driven brief for writing a new CODE-NATIVE variant: performance, audience, insights, data-sufficiency + best-practice fallback, and code instructions |
 | `create_variant` | Creates a no-code **managed text** DRAFT — user must activate in dashboard. Fallback only; not for code-native variants |
 | `pause_variant` | Stops traffic; no MCP resume |
+| `get_cell_matrix` | "Who sees what": per-(visitor type, region) generation state + traffic share. A missing cell = they see the original |
+| `get_cell_detail` | One cell's generated option, its stored rationale, and a plain-language performance verdict |
+| `generate_cell` | Queues async AI generation for one cell (also retries failed ones). Paid plan; check `get_cell_matrix` for progress |
 
 ## Canonical Workflows
 

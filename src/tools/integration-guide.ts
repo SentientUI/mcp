@@ -71,6 +71,15 @@ useLayoutOrder(). Non-React sites: sections: ['#hero', '#pricing', '#faq'] (CSS 
 the theme's natural order) in window.sentient — the snippet reorders those elements within
 their shared parent, and applies nothing if any selector drifts.
 
+## No-code install order (snippet)
+
+Three tags in <head>, in this order: the window.sentient config, the inline pre-paint script,
+then the deferred loader. The middle tag is optional but recommended — the loader is deferred,
+so on a return visit the page can paint its original state before the loader runs; the inline
+script applies the last served decision from the visitor's own device first, with no network
+call and no cloak. Get its exact bytes from the dashboard's Install page, or from
+renderSnippetPrePaintScript() in '@sentientui/snippet/install'.
+
 ## Testing the integration
 
 Use '@sentientui/react/testing': renderWithSentient(ui, { variants, slots, persona }) forces

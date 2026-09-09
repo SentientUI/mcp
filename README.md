@@ -101,6 +101,9 @@ A sandboxed demo token is provisioned automatically — 10 calls/month, read-onl
 | `get_variant_brief` | Insight-driven brief for writing a new **code-native** variant: performance, audience, insights, data-sufficiency (with a best-practice fallback when there's no data yet), and step-by-step code instructions |
 | `create_variant` | Create a no-code (managed) text variant (Starter+) — fallback for text-only variants without a code change |
 | `pause_variant` | Pause a variant to stop traffic assignment |
+| `get_cell_matrix` | The "Who sees what" matrix: which visitor types have an AI-generated version live in each personalizable region, with traffic share and auto-fill status |
+| `get_cell_detail` | One cell's story: the generated option, why it was written (stored rationale), and how it performs vs the original |
+| `generate_cell` | Queue AI generation of a version for one (visitor type, region) cell — brand-locked, live in under a minute (paid plan) |
 
 > **Code-native vs no-code variants.** Variants you declare in your app (`<Adaptive variants={{…}}>`) register automatically the first time the SDK requests an assignment after you deploy — they go live immediately and need **no** `create_variant` call. Use `create_variant` only for **no-code** variants whose content is stored in SentientUI and rendered without a code change; these start as drafts you activate from the dashboard.
 >
