@@ -24,22 +24,22 @@ describe('get_persona_breakdown — percentage math', () => {
   it('computes sessionCount/totalSessions*100 to 1 decimal and reliability to 0 decimals', async () => {
     // 75/200 = 37.5%, reliability 0.66 -> 66%
     const text = await run({
-      clusters: [{ label: 'browsers', sessionCount: 75, avgReliability: 0.66 }],
+      clusters: [{ label: 'guests', sessionCount: 75, avgReliability: 0.66 }],
       totalSessions: 200,
     });
     expect(text).toContain('Total sessions: 200');
-    expect(text).toContain('- `browsers`: 75 sessions (37.5% of traffic, reliability 66%)');
+    expect(text).toContain('- `guests`: 75 sessions (37.5% of traffic, reliability 66%)');
   });
 
   it('renders each cluster on its own line', async () => {
     const text = await run({
       clusters: [
-        { label: 'buyers', sessionCount: 100, avgReliability: 0.9 },
+        { label: 'admins', sessionCount: 100, avgReliability: 0.9 },
         { label: 'lurkers', sessionCount: 300, avgReliability: 0.5 },
       ],
       totalSessions: 400,
     });
-    expect(text).toContain('- `buyers`: 100 sessions (25.0% of traffic, reliability 90%)');
+    expect(text).toContain('- `admins`: 100 sessions (25.0% of traffic, reliability 90%)');
     expect(text).toContain('- `lurkers`: 300 sessions (75.0% of traffic, reliability 50%)');
   });
 

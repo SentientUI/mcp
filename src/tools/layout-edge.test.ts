@@ -23,9 +23,9 @@ async function run(data: unknown) {
 describe('get_layout_stats — rendering', () => {
   it('joins layoutOrder with arrows and formats avgReward to 2 decimals', async () => {
     const text = await run([
-      { persona: 'buyers', layoutOrder: ['pricing', 'hero', 'faq'], avgReward: 0.8, pulls: 120 },
+      { persona: 'admins', layoutOrder: ['pricing', 'hero', 'faq'], avgReward: 0.8, pulls: 120 },
     ]);
-    expect(text).toContain('- `buyers`: [`pricing` → `hero` → `faq`] (avg reward: 0.80, 120 pulls)');
+    expect(text).toContain('- `admins`: [`pricing` → `hero` → `faq`] (avg reward: 0.80, 120 pulls)');
   });
 
   it('pads avgReward to two decimals (0.8 -> 0.80; 0.125.toFixed(2) -> 0.13 per V8)', async () => {
@@ -39,11 +39,11 @@ describe('get_layout_stats — rendering', () => {
 
   it('renders one line per persona', async () => {
     const text = await run([
-      { persona: 'buyers', layoutOrder: ['hero'], avgReward: 0.5, pulls: 10 },
-      { persona: 'browsers', layoutOrder: ['faq', 'hero'], avgReward: 0.33, pulls: 7 },
+      { persona: 'admins', layoutOrder: ['hero'], avgReward: 0.5, pulls: 10 },
+      { persona: 'guests', layoutOrder: ['faq', 'hero'], avgReward: 0.33, pulls: 7 },
     ]);
     expect(text.split('\n')).toHaveLength(2);
-    expect(text).toContain('- `browsers`: [`faq` → `hero`] (avg reward: 0.33, 7 pulls)');
+    expect(text).toContain('- `guests`: [`faq` → `hero`] (avg reward: 0.33, 7 pulls)');
   });
 
   it('shows empty-state message when array is empty', async () => {

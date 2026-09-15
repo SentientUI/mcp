@@ -4,8 +4,9 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 const GUIDE = `# SentientUI integration guide — the adaptive ladder
 
 SentientUI adapts a site per visitor type (personas), learning from real conversions. Each
-project has its own persona vocabulary (dashboard -> Settings -> Personas; the default is
-buyer, researcher, deal_seeker, browser + unknown). Personas are inferred from behavior — or
+project has its own persona vocabulary (dashboard -> Settings -> Personas), and it starts
+EMPTY: every visitor is 'unknown' until a persona exists, and the optimizer learns across all
+traffic pooled in the meantime. Personas are DISCOVERED from behavior — or, far faster,
 DECLARED by the app when it already knows the visitor's role: init({ persona: 'admin' }) /
 <AdaptiveProvider persona=...> / window.sentient.persona. Declared beats inferred and serves
 at full confidence; unrecognized values are ignored server-side and surfaced in the dashboard
@@ -22,8 +23,9 @@ time.
    other React apps use <AdaptiveProvider> from '@sentientui/react') and add
    suppressHydrationWarning to <html> — an inline script sets persona attributes pre-paint.
    Nothing adapts and nothing is tracked until this wrap is in place.
-3. \`npm run dev\`, then open the app with \`?sentient_persona=buyer\` vs
-   \`?sentient_persona=deal_seeker\` to see it adapt. No API key needed (keyless local mode).
+3. \`npm run dev\`, then open the app with \`?sentient_persona=a\` vs
+   \`?sentient_persona=b\` to see it adapt — in keyless local mode any key drives the built-in
+   heuristic. No API key needed. Against a real project the key must be one you declared.
 4. To learn from real traffic: create a project at https://sentient-ui.com and set
    NEXT_PUBLIC_SENTIENT_API_KEY=pk_... in .env.local.
 
@@ -32,8 +34,8 @@ time.
 Persona attributes on <html> (zero declaration; the attribute carries the project's own
 vocabulary keys — declared or inferred):
 
-    html[data-sentient-persona='deal_seeker'] .discount-banner { display: block; }
-    html[data-sentient-confidence='low'] .discount-banner { display: none; }
+    html[data-sentient-persona='admin'] .admin-tools { display: block; }
+    html[data-sentient-confidence='low'] .admin-tools { display: none; }
 
 Learned style tokens (element-scoped, SSR-safe):
 
@@ -48,14 +50,35 @@ prefers-reduced-motion: reduce override in CSS.
 
 ## Rung 2 — Swap (alternate content)
 
+Generated versions (start here) — wrap what the page shows today; the children are the
+original:
+
+    <Adaptive id="hero-cta" goal="signup_click">
+      <a href="/signup">Start free trial</a>
+    </Adaptive>
+
+Mount + deploy registers the region. SentientUI writes versions per visitor type in the
+dashboard ("Who sees what") — no redeploy. The children render for holdout traffic, unknown
+visitor types, types with no version yet, and every error path. No server preload: mounted
+regions are requested in one batched call. First visit shows the original briefly, then swaps;
+return visits start from the last version. Keyless local mode renders originals only. Pass
+onFormSubmit to allow form versions; set reportBaselineText={false} on regions wrapping
+personalized or account content. (Formerly <AdaptiveSlot>.)
+
+Code variants — when you write the alternatives yourself:
+
+    <Adaptive id="buy-box" goal="buy_click"                      // goal REQUIRED
+      variants={{ control: <CalmBuyBox/>, urgent: <UrgentBuyBox/> }} />  // first key = baseline
+
+    // hook form:
     const { value, bind } = useAdaptive('buy-box', {
       variants: { calm: <CalmBuyBox/>, urgent: <UrgentBuyBox/> },  // first key = baseline
       goal: 'buy_click',                                            // REQUIRED
     });
     return <div {...bind}>{value}</div>;
 
-Always attach bind — it wires exposure tracking and goal listeners. <Adaptive> is the wrapper
-form; <AdaptiveText> swaps dashboard-managed text.
+Children or variants on one <Adaptive>, never both. With the hook, always attach bind — it
+wires exposure tracking and goal listeners. <AdaptiveText> swaps dashboard-managed text.
 
 ## Rung 3 — Reorder (structure)
 
@@ -73,12 +96,20 @@ their shared parent, and applies nothing if any selector drifts.
 
 ## No-code install order (snippet)
 
-Three tags in <head>, in this order: the window.sentient config, the inline pre-paint script,
-then the deferred loader. The middle tag is optional but recommended — the loader is deferred,
-so on a return visit the page can paint its original state before the loader runs; the inline
-script applies the last served decision from the visitor's own device first, with no network
-call and no cloak. Get its exact bytes from the dashboard's Install page, or from
-renderSnippetPrePaintScript() in '@sentientui/snippet/install'.
+Two tags in <head>, in this order: one inline <script> that assigns the window.sentient config
+and then, in the same tag after the ';', runs the inline pre-paint script; then the deferred
+loader. The pre-paint script reads window.sentient when it runs, so sharing the tag is safe. It
+is optional but recommended — the loader is deferred, so on a return visit the page can paint
+its original state before the loader runs; the inline script applies the last served decision
+from the visitor's own device first, with no network call and no cloak. Get the exact bytes from
+the dashboard's Install page, or from renderSnippetInstall({ config }) in
+'@sentientui/snippet/install' (renderSnippetPrePaintScript() for the script alone).
+
+Strict Content-Security-Policy (script hashes): use the three-tag form instead — config, the
+pre-paint script alone, then the loader (renderSnippetInstall({ config, split: true })). The
+combined tag contains the site's config, so its hash differs per site; the split pre-paint tag is
+byte-identical everywhere, so one hash covers it. Existing three-tag and config + loader installs
+keep working.
 
 ## Testing the integration
 

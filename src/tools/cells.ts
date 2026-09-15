@@ -23,6 +23,19 @@ const cellOutput = z.object({
   rationale: z.string().nullable(),
   error: z.string().nullable(),
   updatedAt: z.string(),
+  // These ride the API response too; omitting them from the schema made zod
+  // STRIP them, so agents could never see refinement or retry state.
+  refinedFrom: z
+    .string()
+    .nullable()
+    .optional()
+    .describe('Incumbent arm this cell is improving on — a pending cell with this set still SERVES the incumbent'),
+  notBefore: z
+    .string()
+    .nullable()
+    .optional()
+    .describe('ISO time the queue will next consider this cell (retry backoff / daily-cap deferral); null when due now'),
+  attempts: z.number().optional().describe('Generation attempts so far'),
   performance: z
     .object({
       shown: z.number(),
@@ -31,7 +44,7 @@ const cellOutput = z.object({
       tier: z.string().describe('early | no_baseline | winning | losing | flat'),
     })
     .optional()
-    .describe('Present on live cells: the at-a-glance readout'),
+    .describe('Present on live cells (and, mid-refinement, the incumbent arm): the at-a-glance readout'),
 });
 
 export function registerCellTools(server: McpServer, client: ApiClient): void {
@@ -44,7 +57,18 @@ export function registerCellTools(server: McpServer, client: ApiClient): void {
         UNTRUSTED_FIELDS_NOTE,
       inputSchema: { projectId: projectIdSchema },
       outputSchema: {
-        slots: z.array(z.object({ slotId: z.string(), displayName: z.string(), supportsForms: z.boolean() })),
+        slots: z.array(
+          z.object({
+            slotId: z.string(),
+            displayName: z.string(),
+            supportsForms: z.boolean(),
+            // API sends this; without it zod stripped the draft-vs-live signal.
+            live: z
+              .boolean()
+              .optional()
+              .describe('False for an sdk-registered draft column — nothing serves until its first generation publishes it'),
+          }),
+        ),
         personas: z.array(personaOutput),
         cells: z.array(cellOutput),
         autoFill: z.boolean(),
@@ -56,7 +80,7 @@ export function registerCellTools(server: McpServer, client: ApiClient): void {
     withApiErrorGuidance(async ({ projectId }) => {
       const id = encodeURIComponent(projectId);
       const data = await client.get<{
-        slots: Array<{ slotId: string; displayName: string; supportsForms: boolean }>;
+        slots: Array<{ slotId: string; displayName: string; supportsForms: boolean; live?: boolean }>;
         personas: Array<{ key: string; displayName: string; description: string | null; share: number }>;
         cells: Array<z.infer<typeof cellOutput>>;
         autoFill: boolean;
@@ -66,13 +90,22 @@ export function registerCellTools(server: McpServer, client: ApiClient): void {
 
       const byCell = new Map(data.cells.map((c) => [`${c.slotId}::${c.persona}`, c]));
       const lines: string[] = [
-        `Slots: ${data.slots.map((s) => untrusted(s.displayName)).join(', ') || '(none published)'}`,
+        `Slots: ${data.slots.map((s) => `${untrusted(s.displayName)}${s.live === false ? ' [draft]' : ''}`).join(', ') || '(none published)'}`,
         `Auto-fill on first miss: ${data.autoFill ? 'ON' : 'off'} · persona source: ${data.personaSource}`,
       ];
       for (const p of data.personas) {
         const states = data.slots.map((s) => {
           const c = byCell.get(`${s.slotId}::${p.key}`);
-          return `${untrusted(s.displayName, 40)}: ${c ? c.status : 'original'}`;
+          let state = c ? c.status : 'original';
+          if (c && (c.status === 'pending' || c.status === 'generating') && c.refinedFrom) {
+            // Mid-refinement is NOT a regression: the incumbent keeps serving
+            // while a sharper version is written — say so, or agents report a
+            // winning cell as "stuck pending".
+            state = `${c.status} (improving on ${untrusted(c.refinedFrom, 64)} — current version still live)`;
+          } else if (c && c.status === 'pending' && c.notBefore && Date.parse(c.notBefore) > Date.now()) {
+            state = `pending (waiting until ${c.notBefore})`;
+          }
+          return `${untrusted(s.displayName, 40)}: ${state}`;
         });
         lines.push(`- ${untrusted(p.displayName)} (${Math.round(p.share * 100)}% of visitors) — ${states.join(' · ')}`);
       }
@@ -141,6 +174,11 @@ export function registerCellTools(server: McpServer, client: ApiClient): void {
         lines.push('No generated version is live for this cell.');
       }
       if (data.cell?.rationale) lines.push(`Why this exists: ${untrusted(data.cell.rationale, 500)}`);
+      if (data.cell?.refinedFrom && (data.cell.status === 'pending' || data.cell.status === 'generating')) {
+        lines.push(
+          `An improved take on ${untrusted(data.cell.refinedFrom, 64)} is being written — the current version keeps serving meanwhile.`,
+        );
+      }
       if (data.cell?.error) lines.push(`Last attempt failed: ${untrusted(data.cell.error, 300)}`);
       lines.push(data.verdict);
       if (data.performance) {

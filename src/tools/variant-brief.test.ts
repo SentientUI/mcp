@@ -63,7 +63,7 @@ const sufficientResponses = {
     momentum: [{ variantId: 'v_a', direction: 'gaining' }],
   },
   portraits: {
-    clusters: [{ label: 'buyers', sessionCount: 150, avgReliability: 0.8 }],
+    clusters: [{ label: 'admins', sessionCount: 150, avgReliability: 0.8 }],
     totalSessions: 300,
   },
   insights: {
@@ -101,7 +101,7 @@ describe('get_variant_brief — DataState branches', () => {
     const text = await run({
       ...sufficientResponses,
       portraits: {
-        clusters: [{ label: 'buyers', sessionCount: 150, avgReliability: 0.1 }],
+        clusters: [{ label: 'admins', sessionCount: 150, avgReliability: 0.1 }],
         totalSessions: 300,
       },
     });
@@ -163,7 +163,7 @@ describe('get_variant_brief — formatting', () => {
     // 150/300 = 50%, reliability 0.8 -> 80%
     const text = await run(sufficientResponses);
     expect(text).toContain('Audience (300 sessions):');
-    expect(text).toContain('- `buyers`: 50% of traffic (reliability 80%)');
+    expect(text).toContain('- `admins`: 50% of traffic (reliability 80%)');
   });
 
   it('includes both narrator observations and advisor recommendations', async () => {

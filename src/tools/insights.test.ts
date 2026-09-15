@@ -51,7 +51,7 @@ describe('get_insights', () => {
     const client = new ApiClient({ apiKey: 'sk_test' });
     vi.spyOn(client, 'get').mockResolvedValue({
       findings: [finding({
-        kind: 'attention', audience: 'buyer', headline: 'buyer visitors spend 2.0x more time on pricing',
+        kind: 'attention', audience: 'admin', headline: 'admin visitors spend 2.0x more time on pricing',
         provenance: { sample: 87, coverage: 0.1, denominatorLabel: 'visits we could group into an audience' },
       })],
       reached: 'patterned', emptyReason: null,
@@ -199,13 +199,13 @@ describe('get_persona_breakdown', () => {
   it('returns cluster summary with percentages', async () => {
     const client = new ApiClient({ apiKey: 'sk_test' });
     vi.spyOn(client, 'get').mockResolvedValue({
-      clusters: [{ label: 'buyers', sessionCount: 120, avgReliability: 0.75 }],
+      clusters: [{ label: 'admins', sessionCount: 120, avgReliability: 0.75 }],
       totalSessions: 300,
     });
     const server = makeServer();
     registerPersonaTools(server as any, client);
     const result = await server.tools['get_persona_breakdown']!.handler({ projectId: 'p1' });
-    expect(result.content[0].text).toContain('buyers');
+    expect(result.content[0].text).toContain('admins');
     expect(result.content[0].text).toContain('120');
     expect(result.content[0].text).toContain('40.0%');
   });
@@ -253,12 +253,12 @@ describe('get_layout_stats', () => {
   it('returns layout policy weights per persona', async () => {
     const client = new ApiClient({ apiKey: 'sk_test' });
     vi.spyOn(client, 'get').mockResolvedValue([
-      { persona: 'buyers', layoutOrder: ['pricing', 'hero', 'testimonials'], avgReward: 0.8, pulls: 120 },
+      { persona: 'admins', layoutOrder: ['pricing', 'hero', 'testimonials'], avgReward: 0.8, pulls: 120 },
     ]);
     const server = makeServer();
     registerLayoutTools(server as any, client);
     const result = await server.tools['get_layout_stats']!.handler({ projectId: 'p1' });
-    expect(result.content[0].text).toContain('buyers');
+    expect(result.content[0].text).toContain('admins');
     expect(result.content[0].text).toContain('pricing');
     expect(result.content[0].text).toContain('0.80');
   });

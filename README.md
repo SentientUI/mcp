@@ -105,6 +105,8 @@ A sandboxed demo token is provisioned automatically — 10 calls/month, read-onl
 | `get_cell_detail` | One cell's story: the generated option, why it was written (stored rationale), and how it performs vs the original |
 | `generate_cell` | Queue AI generation of a version for one (visitor type, region) cell — brand-locked, live in under a minute (paid plan) |
 
+> **Generated versions.** An `<Adaptive id="…">` that wraps your original as children (no `variants`) registers as a personalizable region once it is mounted and deployed. Its versions per visitor type are written in SentientUI — inspect and fill them with `get_cell_matrix`, `get_cell_detail`, and `generate_cell` — with no code change or redeploy.
+>
 > **Code-native vs no-code variants.** Variants you declare in your app (`<Adaptive variants={{…}}>`) register automatically the first time the SDK requests an assignment after you deploy — they go live immediately and need **no** `create_variant` call. Use `create_variant` only for **no-code** variants whose content is stored in SentientUI and rendered without a code change; these start as drafts you activate from the dashboard.
 >
 > **Optimizing a component?** Call `get_variant_brief` first. It returns the component's performance, audience, insights, and a data-sufficiency assessment — then your AI assistant writes a new on-brand variant directly into your code (which auto-registers on deploy). When there's no data yet, the brief falls back to best-practice priors for your project's context type so the assistant still makes a sensible change.

@@ -5,7 +5,7 @@ description: Use when working with SentientUI — an adaptive UI personalization
 
 # Working with SentientUI
 
-SentientUI adapts a website per visitor type (personas: buyer, researcher, deal_seeker, browser, unknown), learning from real conversions with a Thompson-Sampling bandit. Decisions are locked per session: Visit 1 learns, Visit 2 converts.
+SentientUI adapts a website per visitor type (personas are the keys your app declares, e.g. `admin` or `evaluator`, or that discovery proposes; `unknown` until then), learning from real conversions with a Thompson-Sampling bandit. Decisions are locked per session: Visit 1 learns, Visit 2 converts.
 
 ## Connect to the MCP server
 
