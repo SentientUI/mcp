@@ -69,6 +69,22 @@ describe('get_cell_matrix', () => {
     expect(out).toMatchObject({ personaSource: 'default' });
   });
 
+  // Regression: personaSource was z.string(), but the API types it
+  // 'default' | 'declared' | 'discovered' | null (cell-matrix.ts) and returns
+  // null for a project with no persona set — the normal state since the default
+  // vocabulary was emptied. Output validation then failed and the tool returned
+  // a zod error instead of the matrix on most real projects.
+  it('accepts a null personaSource — a project with no persona set at all', async () => {
+    vi.spyOn(client, 'get').mockResolvedValue({ ...MATRIX, personaSource: null });
+    const result = await server.tools['get_cell_matrix']!.handler({ projectId: PROJECT_ID });
+    const out = z.object(server.tools['get_cell_matrix']!.config.outputSchema!).parse(
+      (result as { structuredContent: unknown }).structuredContent,
+    );
+    expect(out).toMatchObject({ personaSource: null });
+    const text = (result as { content: Array<{ text: string }> }).content[0]!.text;
+    expect(text).toContain('persona source: none');
+  });
+
   it('keeps refinement, retry, and draft-vs-live state instead of zod-stripping it', async () => {
     vi.spyOn(client, 'get').mockResolvedValue(MATRIX);
     const result = await server.tools['get_cell_matrix']!.handler({ projectId: PROJECT_ID });

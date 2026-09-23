@@ -19,10 +19,11 @@ time.
 1. Run \`npx @sentientui/cli init\` (detects Next App/Pages, Vite, Remix, CRA; installs
    @sentientui/react; writes .env.local; scaffolds an example). It does NOT edit your layout —
    it prints the wrap snippet for step 2.
-2. Wrap the root layout with <AdaptiveRoot apiKey context> (from '@sentientui/react/next';
-   other React apps use <AdaptiveProvider> from '@sentientui/react') and add
-   suppressHydrationWarning to <html> — an inline script sets persona attributes pre-paint.
-   Nothing adapts and nothing is tracked until this wrap is in place.
+2. Wrap the root layout with <AdaptiveRoot apiKey>{children}</AdaptiveRoot> (from
+   '@sentientui/react/next'; other React apps use <AdaptiveProvider> from '@sentientui/react')
+   and add suppressHydrationWarning to <html> — an inline script sets persona attributes
+   pre-paint. Nothing adapts and nothing is tracked until this wrap is in place. Declare no
+   components here: every <Adaptive> registers itself when it renders (see Rung 2).
 3. \`npm run dev\`, then open the app with \`?sentient_persona=a\` vs
    \`?sentient_persona=b\` to see it adapt — in keyless local mode any key drives the built-in
    heuristic. No API key needed. Against a real project the key must be one you declared.
@@ -59,9 +60,17 @@ original:
 
 Mount + deploy registers the region. SentientUI writes versions per visitor type in the
 dashboard ("Who sees what") — no redeploy. The children render for holdout traffic, unknown
-visitor types, types with no version yet, and every error path. No server preload: mounted
-regions are requested in one batched call. First visit shows the original briefly, then swaps;
-return visits start from the last version. Keyless local mode renders originals only. Pass
+visitor types, types with no version yet, and every error path. Mounted regions are requested
+in one batched call after mount: the first visit shows the original briefly, then swaps; return
+visits start from the last version. Keyless local mode renders originals only.
+
+Optional server preload (Next.js App Router): registrySlotIds={['hero-cta']} for generated
+regions, components={[{ id, variantIds }]} for code variants, both on AdaptiveRoot — the first
+paint then shows the served version. List ONLY ids rendered on every page that AdaptiveRoot
+wraps (in app/layout.tsx, every route): a declared id is decided on every request, rendered or
+not, and those visits count as views that can never convert.
+
+Pass
 onFormSubmit to allow form versions; set reportBaselineText={false} on regions wrapping
 personalized or account content. (Formerly <AdaptiveSlot>.)
 
@@ -110,6 +119,31 @@ pre-paint script alone, then the loader (renderSnippetInstall({ config, split: t
 combined tag contains the site's config, so its hash differs per site; the split pre-paint tag is
 byte-identical everywhere, so one hash covers it. Existing three-tag and config + loader installs
 keep working.
+
+## Capture AI assistants (server-side, any framework)
+
+AI assistants that fetch pages for their users (ChatGPT-User, Claude-User, Perplexity-User)
+and AI crawlers (GPTBot, ClaudeBot, …) run no JavaScript, so the snippet and the React SDK never
+see them. Only your server does. Without server-side capture the dashboard's agent line reads
+"not measured", not zero. Capture only observes: it never changes what is served.
+
+- Next.js with AdaptiveRoot: already on (captureAgents defaults to true).
+- Edge (Vercel Routing Middleware, Cloudflare Workers, Netlify Edge) — covers ANY framework on
+  those hosts, static sites included:
+    import { captureAgentRequest } from '@sentientui/core/server';
+    captureAgentRequest(request, { apiKey: 'pk_...', source: 'edge', waitUntil });
+  waitUntil is required on edge runtimes (ctx.waitUntil.bind(ctx) on Workers; waitUntil from
+  '@vercel/functions' on Vercel), or the platform drops the request when the response returns.
+- Node servers (Express, Nuxt/Nitro on Node, any (req, res, next) stack):
+    import { sentientAgentMiddleware } from '@sentientui/core/server';
+    app.use(sentientAgentMiddleware({ apiKey: 'pk_...' }));
+- Hono / Remix / React Router / Astro / SvelteKit: call captureAgentRequest(request, { apiKey })
+  from the request hook.
+
+Only the path is sent (never the query string), with the user agent. The API re-derives the
+agent itself and collapses the same fetch reported twice (e.g. edge + SSR), so running two
+capture paths does not double-count. Hosted builders (Shopify themes, Webflow, Squarespace, Wix)
+give no per-request hook and stay unmeasured.
 
 ## Testing the integration
 

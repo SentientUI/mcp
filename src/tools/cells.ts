@@ -72,7 +72,14 @@ export function registerCellTools(server: McpServer, client: ApiClient): void {
         personas: z.array(personaOutput),
         cells: z.array(cellOutput),
         autoFill: z.boolean(),
-        personaSource: z.string().describe("Active persona-set source: default | declared | discovered"),
+        // Nullable: a project with no persona set at all reports null, not a
+        // string. That is the NORMAL state since the default vocabulary was
+        // emptied, so a non-nullable schema failed output validation on most
+        // projects and the tool returned nothing but a zod error.
+        personaSource: z
+          .string()
+          .nullable()
+          .describe('Active persona-set source: default | declared | discovered, or null when the project has no persona set (one "everyone" row)'),
         undecidedShare: z.number(),
       },
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
@@ -84,14 +91,14 @@ export function registerCellTools(server: McpServer, client: ApiClient): void {
         personas: Array<{ key: string; displayName: string; description: string | null; share: number }>;
         cells: Array<z.infer<typeof cellOutput>>;
         autoFill: boolean;
-        personaSource: string;
+        personaSource: string | null;
         undecidedShare: number;
       }>(`/projects/${id}/cells`);
 
       const byCell = new Map(data.cells.map((c) => [`${c.slotId}::${c.persona}`, c]));
       const lines: string[] = [
         `Slots: ${data.slots.map((s) => `${untrusted(s.displayName)}${s.live === false ? ' [draft]' : ''}`).join(', ') || '(none published)'}`,
-        `Auto-fill on first miss: ${data.autoFill ? 'ON' : 'off'} · persona source: ${data.personaSource}`,
+        `Auto-fill on first miss: ${data.autoFill ? 'ON' : 'off'} · persona source: ${data.personaSource ?? 'none (one "everyone" row)'}`,
       ];
       for (const p of data.personas) {
         const states = data.slots.map((s) => {

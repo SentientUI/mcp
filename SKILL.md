@@ -27,6 +27,6 @@ Discovery (`initialize`, `tools/list`) is public; tool calls require auth.
 
 - **Check performance:** `list_projects` → `get_variant_performance` / `get_goal_funnel` → `get_insights`.
 - **Improve a component:** `get_variant_brief` for the component, write the new variant in code (it auto-registers on deploy), then `get_test_brief` to lock it in tests.
-- **Integrate SentientUI:** `get_integration_guide`, then wrap components with `<Adaptive>` / `useAdaptive` from `@sentientui/react`.
+- **Integrate SentientUI:** `get_integration_guide`, then wrap components with `<Adaptive>` from `@sentientui/react`. `<Adaptive>` fills a region two ways and they are not interchangeable: with **children** (no `variants`) it registers a region SentientUI writes versions for per visitor type, and it appears as a column in the dashboard's "Who sees what" — start here. With **`variants`** it runs an A/B test between versions you wrote yourself, and it never appears there (`useAdaptive` is the hook form of this second one). Either way `goal` is required, and it should be a **named string** (`goal="signup_click"`): an object config like `{ type: 'click', selector: 'a' }` is unnamed and reports under the bare type `click`.
 
 Learn more: https://sentient-ui.com/docs
