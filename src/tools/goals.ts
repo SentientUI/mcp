@@ -13,6 +13,7 @@ import {
   UNTRUSTED_FIELDS_NOTE,
   type RangeArgs,
 } from './common.js';
+import { MIN_EVIDENCE_SAMPLE, isLowSample, rateWithN } from './evidence.js';
 
 export function registerGoalTools(server: McpServer, client: ApiClient): void {
   server.registerTool(
@@ -52,6 +53,9 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
                         'ALL-TIME completion rate per assigned session (0-1). Not windowed: ' +
                           'unaffected by `range`/`from`/`to`, and bounded only by plan retention.',
                       ),
+                    sessionsWithGoal: z.number().nullable().describe('Numerator of completionRate (null if the API did not send it)'),
+                    sessionsWithAssignment: z.number().nullable().describe('n of completionRate: assigned sessions (null if the API did not send it)'),
+                    lowSample: z.boolean().describe(`True under ${MIN_EVIDENCE_SAMPLE} assigned sessions, or when n is unknown — not interpretable on its own`),
                   }),
                 )
                 .describe(
@@ -81,7 +85,13 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
           revenue?: number | null;
           avgOrderValue?: number | null;
           revenuePerSession?: number | null;
-          variants: Array<{ componentId: string; variantId: string; completionRate: number }>;
+          variants: Array<{
+            componentId: string;
+            variantId: string;
+            completionRate: number;
+            sessionsWithGoal?: number;
+            sessionsWithAssignment?: number;
+          }>;
         }>;
         window?: NonNullable<z.infer<typeof windowOutputSchema>>;
       }>(`/projects/${id}/goals${rangeQuery({ range, from, to })}`);
@@ -103,6 +113,9 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
             componentId: v.componentId,
             variantId: v.variantId,
             completionRate: v.completionRate,
+            sessionsWithGoal: v.sessionsWithGoal ?? null,
+            sessionsWithAssignment: v.sessionsWithAssignment ?? null,
+            lowSample: typeof v.sessionsWithAssignment === 'number' ? isLowSample(v.sessionsWithAssignment) : true,
           })),
         })),
       };
@@ -131,13 +144,23 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
         // assignment history). The dashboard labels them; this text had not,
         // so a narrowed `range` returned identical variant rates next to a
         // windowed headline and read as a windowed comparison.
-        ...g.variants.map((v) => `  ${untrusted(v.componentId)}/${untrusted(v.variantId)}: ${(v.completionRate * 100).toFixed(1)}% per assigned session (all-time)`),
+        //
+        // Each rate carries its n (the API sends both counts): "100.0%" on one
+        // assigned session printed exactly like 100% on a thousand. These are
+        // descriptive per-arm rates — no evidence verdict applies to them here,
+        // so the text never orders or ranks them.
+        ...g.variants.map((v) =>
+          typeof v.sessionsWithAssignment === 'number' && typeof v.sessionsWithGoal === 'number'
+            ? `  ${untrusted(v.componentId)}/${untrusted(v.variantId)}: ${rateWithN(v.sessionsWithGoal, v.sessionsWithAssignment, 'assigned sessions')} (all-time)`
+            : `  ${untrusted(v.componentId)}/${untrusted(v.variantId)}: ${(v.completionRate * 100).toFixed(1)}% per assigned session (all-time; sample size not reported — treat as uninterpretable)`,
+        ),
         '',
       ]);
 
       const hasVariants = data.goals.some((g) => g.variants.length > 0);
       const caveat = hasVariants
-        ? ['', 'Note: goal hits/conversion respect the window above; per-variant rates marked (all-time) do not.']
+        ? ['', 'Note: goal hits/conversion respect the window above; per-variant rates marked (all-time) do not. ' +
+            'Per-variant rates are descriptive — for whether one arm is actually ahead, use get_variant_performance (server evidence verdicts).']
         : [];
       const text = (win ? [win, '', ...lines, ...caveat] : [...lines, ...caveat]).join('\n').trim();
       return { content: [{ type: 'text' as const, text }], structuredContent, _meta: uiMeta('goal-funnel') };

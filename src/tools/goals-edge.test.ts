@@ -227,7 +227,33 @@ describe('get_goal_funnel — all-time variant rates are labelled as such', () =
         variants: [{ componentId: 'hero_cta', variantId: 'social', completionRate: 0.228 }],
       }],
     });
-    expect(text).toContain('`hero_cta`/`social`: 22.8% per assigned session (all-time)');
+    // An older API sends no counts: the rate is still shown, but flagged
+    // as having no reported n rather than presented as a bare percentage.
+    expect(text).toContain('`hero_cta`/`social`: 22.8% per assigned session (all-time; sample size not reported');
+  });
+
+  // S6: a per-variant rate printed without its n — "100.0%" on one assigned
+  // session read exactly like 100% on a thousand.
+  it('carries n on every per-variant rate and flags low samples', async () => {
+    const client = new ApiClient({ apiKey: 'sk_test' });
+    vi.spyOn(client, 'get').mockResolvedValue({
+      goals: [{
+        goalName: 'signup', hits: 5, uniqueSessions: 5, pct: 0.1,
+        variants: [
+          { componentId: 'hero', variantId: 'tiny', completionRate: 1, sessionsWithGoal: 1, sessionsWithAssignment: 1 },
+          { componentId: 'hero', variantId: 'big', completionRate: 0.3, sessionsWithGoal: 300, sessionsWithAssignment: 1000 },
+        ],
+      }],
+    } as never);
+    const server = makeServer();
+    registerGoalTools(server as never, client);
+    const result = await server.tools['get_goal_funnel']!.handler({ projectId: 'p1' });
+    const text = result.content[0].text as string;
+    expect(text).toContain('`hero`/`tiny`: 100.00% (1/1 assigned sessions, LOW SAMPLE');
+    expect(text).toContain('`hero`/`big`: 30.00% (300/1000 assigned sessions) (all-time)');
+    const v = (result.structuredContent as { goals: Array<{ variants: Array<{ lowSample: boolean; sessionsWithAssignment: number | null }> }> }).goals[0]!.variants;
+    expect(v.map((x) => x.lowSample)).toEqual([true, false]);
+    expect(v[1]!.sessionsWithAssignment).toBe(1000);
   });
 
   it('appends the window caveat when any goal has variants', async () => {

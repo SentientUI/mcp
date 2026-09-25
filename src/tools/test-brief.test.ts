@@ -78,4 +78,39 @@ describe('get_test_brief', () => {
     expect(sc.forcedVariantId).toBe('b steal');
     expect(sc.goalName).toBe('signup evil:');
   });
+
+  // M4: the component id was emitted as a BARE object key, so the
+  // ready-to-paste example for `hero-cta` was `{ hero-cta: 'b' }` — a syntax error.
+  it('emits valid JS for a hyphenated component id', async () => {
+    const client = clientWith(
+      { components: [{ component_id: 'hero-cta', variants: [{ variant_id: 'control' }, { variant_id: 'accent' }] }] },
+      { goals: [{ goalName: 'signup' }] },
+    );
+    const server = makeServer();
+    registerTestBriefTools(server as never, client);
+    const result = await server.tools['get_test_brief']!.handler({ projectId: 'p1', componentId: 'hero-cta' });
+    const text = result.content[0].text as string;
+    expect(text).not.toMatch(/\{ hero-cta:/);
+    expect(text).toContain(`renderWithSentient(<YourPage />, { variants: { "hero-cta": 'accent' } });`);
+    expect(text).toContain(`s.use({ variants: { "hero-cta": 'accent' } });`);
+    expect(text).toContain(`mockSentient(page, { variants: { "hero-cta": 'accent' } })`);
+    // Every scenario literal the brief emits must parse as a JS expression.
+    const scenarios = text.match(/\{ variants: \{ .*? \} \}/g) ?? [];
+    expect(scenarios.length).toBe(3);
+    for (const lit of scenarios) expect(() => new Function(`return (${lit});`)).not.toThrow();
+  });
+
+  it('quotes a component id with a quote in it inside test titles and keys', async () => {
+    const client = clientWith({ components: [] }, { goals: [] });
+    const server = makeServer();
+    registerTestBriefTools(server as never, client);
+    const result = await server.tools['get_test_brief']!.handler({ projectId: 'p1', componentId: "it's-hero" });
+    const text = result.content[0].text as string;
+    const titles = text.match(/^test\((".*?"), /gm) ?? [];
+    expect(titles.length).toBe(2);
+    expect(text).toContain(`{ variants: { "it's-hero": 'variant_b' } }`);
+    const goto = text.match(/page\.goto\(("\/\?sentient_variant=.*)\);/)![1]!;
+    expect(goto).toBe(`"/?sentient_variant=it's-hero:variant_b"`);
+    expect(() => new Function(`return ${goto};`)).not.toThrow();
+  });
 });

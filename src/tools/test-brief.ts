@@ -9,8 +9,9 @@ import {
   throwIfNotDegradable,
   codeSafe,
 } from './common.js';
+import { baselineOf } from './evidence.js';
 
-type ComponentRow = { component_id: string; variants: Array<{ variant_id: string }> };
+type ComponentRow = { component_id: string; control_id?: string | null; baseline_explicit?: boolean; variants: Array<{ variant_id: string }> };
 type GoalRow = { goalName: string };
 type GoalsResponse = { goals?: GoalRow[] } | GoalRow[];
 
@@ -64,9 +65,21 @@ export function registerTestBriefTools(server: McpServer, client: ApiClient): vo
       // identifier-safe characters (legitimate ids pass through unchanged).
       const goalName = codeSafe(goals[0]?.goalName ?? 'signup');
 
-      // Choose a non-control variant to force in the example when one exists.
-      const controlId = variantIds[0] ?? 'control';
+      // Choose a non-baseline variant to force in the example when one exists
+      // (baseline picked by the server's rule, not "whichever came first").
+      const controlId = (component ? baselineOf(component)?.id : null) ?? 'control';
       const forcedId = codeSafe(variantIds.find((v) => v !== controlId) ?? 'variant_b');
+
+      // The component id became a BARE object key — `{ hero-cta: 'b' }` is a
+      // syntax error, and hyphenated ids are the common case (audit M4). Every
+      // place it lands in code is now a JSON string literal, which is valid for
+      // any id and cannot be broken out of; the URL form is percent-encoded and
+      // then JSON-quoted too (encodeURIComponent leaves ' alone, which closed
+      // the old single-quoted goto string).
+      const cid = JSON.stringify(componentId);
+      const scenario = `{ variants: { ${cid}: '${forcedId}' } }`;
+      const title = (what: string) => JSON.stringify(`${componentId}: ${what}`);
+      const urlOverride = `${encodeURIComponent(componentId)}:${encodeURIComponent(forcedId)}`;
 
       const lines: string[] = [];
       lines.push(`# Test brief — ${componentId}`);
@@ -82,8 +95,8 @@ export function registerTestBriefTools(server: McpServer, client: ApiClient): vo
       lines.push(`import { renderWithSentient } from '@sentientui/react/testing';`);
       lines.push(`import { screen } from '@testing-library/react';`);
       lines.push('');
-      lines.push(`test('${componentId}: forces the "${forcedId}" variant', () => {`);
-      lines.push(`  renderWithSentient(<YourPage />, { variants: { ${componentId}: '${forcedId}' } });`);
+      lines.push(`test(${title(`forces the ${forcedId} variant`)}, () => {`);
+      lines.push(`  renderWithSentient(<YourPage />, ${scenario});`);
       lines.push(`  // assert on the ${forcedId} variant's content:`);
       lines.push(`  // expect(screen.getByText('…')).toBeInTheDocument();`);
       lines.push('});');
@@ -97,8 +110,8 @@ export function registerTestBriefTools(server: McpServer, client: ApiClient): vo
       lines.push(`const s = setupSentientServer();`);
       lines.push(`afterAll(() => s.server.close());`);
       lines.push('');
-      lines.push(`test('${componentId}: fires the ${goalName} goal', async () => {`);
-      lines.push(`  s.use({ variants: { ${componentId}: '${forcedId}' } });`);
+      lines.push(`test(${title(`fires the ${goalName} goal`)}, async () => {`);
+      lines.push(`  s.use(${scenario});`);
       lines.push(`  // …render with a live client, trigger the interaction…`);
       lines.push(`  expect(hasFiredGoal(getSentientEvents(), '${goalName}')).toBe(true);`);
       lines.push('});');
@@ -109,14 +122,14 @@ export function registerTestBriefTools(server: McpServer, client: ApiClient): vo
       lines.push('```ts');
       lines.push(`import { mockSentient } from '@sentientui/react/testing';`);
       lines.push('');
-      lines.push(`const s = await mockSentient(page, { variants: { ${componentId}: '${forcedId}' } });`);
+      lines.push(`const s = await mockSentient(page, ${scenario});`);
       lines.push(`await page.goto('/');`);
       lines.push(`expect(s.events().some((e) => e.goalType === '${goalName}')).toBe(true);`);
       lines.push('```');
       lines.push(`Cypress: \`mockSentientCypress(cy, scenario)\` in a beforeEach. **Prefer mockSentient in CI — it writes nothing.**`);
       lines.push(`The URL param below is fine for a quick local pin, but a live client still creates an (automation-flagged) session:`);
       lines.push('```ts');
-      lines.push(`await page.goto('/?sentient_variant=${componentId}:${forcedId}');`);
+      lines.push(`await page.goto(${JSON.stringify(`/?sentient_variant=${urlOverride}`)});`);
       lines.push('```');
 
       const markdown = lines.join('\n');

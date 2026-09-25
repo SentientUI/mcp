@@ -40,8 +40,12 @@ const cellOutput = z.object({
     .object({
       shown: z.number(),
       conversions: z.number(),
-      deltaPct: z.number().nullable().describe('Signed % vs the original conversion rate'),
-      tier: z.string().describe('early | no_baseline | winning | losing | flat'),
+      deltaPct: z.number().nullable().describe('Signed % vs the original conversion rate — a point estimate; only meaningful beside a winning/losing tier'),
+      tier: z
+        .string()
+        .describe(
+          'early | no_baseline (under 100 views) | winning | losing (posterior separated from the original, corrected across the slot column) | flat (NOT separated yet — not "equal")',
+        ),
     })
     .optional()
     .describe('Present on live cells (and, mid-refinement, the incumbent arm): the at-a-glance readout'),

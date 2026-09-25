@@ -88,17 +88,17 @@ A sandboxed demo token is provisioned automatically — 10 calls/month, read-onl
 | `create_project` | Create a new project and return its `pk_` public key (account login required — not usable with an `sk_` project key or demo token) |
 | `get_project_stats` | Events, sessions, agent calls, and health status |
 | `list_components` | All adaptive components with variant counts |
-| `get_variant_performance` | CVR, momentum, and impressions per variant (windowed: range 7d/30d/90d/all or from/to; default 7d vs prior 7d) |
-| `get_insights` | AI-generated narrator observations and advisor recommendations |
+| `get_variant_performance` | Per-(component, variant) conversion with its sample, plus the server's evidence verdict vs the baseline (windowed rates: range 7d/30d/90d/all or from/to; default 7d; the verdict judges the windowed rate, with all-time reliability reported separately — all-time only on APIs without window evidence) |
+| `get_insights` | Ranked measured findings with tier and sample (low samples flagged), plus AI narrations marked as unmeasured |
 | `refresh_insights` | Trigger fresh AI insight generation |
 | `get_persona_breakdown` | Visitor cluster distribution with reliability scores |
-| `get_goal_funnel` | Goal hit counts and conversion rates per variant (windowed; default 30d) |
+| `get_goal_funnel` | Goal hit counts and conversion rates (windowed; default 30d), plus all-time per-variant rates with their n |
 | `list_goals` | Defined goals (id, role, event, status) — includes goals with no conversions yet, so agents can wire a dashboard-defined goal into code |
 | `list_guardrail_events` | Variants auto-paused by the guardrail (last 24h) |
 | `get_layout_stats` | Per-persona section layout rankings and reward weights |
 | `get_integration_guide` | SentientUI adaptive-ladder setup guide (static — same for every project) |
-| `get_test_brief` | What to test and how, for the project's current state |
-| `get_variant_brief` | Insight-driven brief for writing a new **code-native** variant: performance, audience, insights, data-sufficiency (with a best-practice fallback when there's no data yet), and step-by-step code instructions |
+| `get_test_brief` | Ready-to-paste test code (RTL, mock server, Playwright/Cypress) that forces one of the component's real variants |
+| `get_variant_brief` | Evidence-driven brief for writing a new **code-native** variant: per-arm rates with n and evidence verdicts, audience, measured findings, an evidence state (with a best-practice fallback while nothing is decided), and step-by-step code instructions |
 | `create_variant` | Create a no-code (managed) text variant (Starter+) — fallback for text-only variants without a code change |
 | `pause_variant` | Pause a variant to stop traffic assignment |
 | `get_cell_matrix` | The "Who sees what" matrix: which visitor types have an AI-generated version live in each personalizable region, with traffic share and auto-fill status |
@@ -109,7 +109,7 @@ A sandboxed demo token is provisioned automatically — 10 calls/month, read-onl
 >
 > **Code-native vs no-code variants.** Variants you declare in your app (`<Adaptive variants={{…}}>`) register automatically the first time the SDK requests an assignment after you deploy — they go live immediately and need **no** `create_variant` call. Use `create_variant` only for **no-code** variants whose content is stored in SentientUI and rendered without a code change; these start as drafts you activate from the dashboard.
 >
-> **Optimizing a component?** Call `get_variant_brief` first. It returns the component's performance, audience, insights, and a data-sufficiency assessment — then your AI assistant writes a new on-brand variant directly into your code (which auto-registers on deploy). When there's no data yet, the brief falls back to best-practice priors for your project's context type so the assistant still makes a sensible change.
+> **Optimizing a component?** Call `get_variant_brief` first. It returns each variant's rate with its sample and the server's evidence verdict, the audience, measured findings, and an evidence-state assessment — then your AI assistant writes a new on-brand variant directly into your code (which auto-registers on deploy). While nothing is decided, the brief falls back to best-practice priors for your project's context type so the assistant still makes a sensible change.
 
 ## Example prompts
 

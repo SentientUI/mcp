@@ -156,26 +156,29 @@ const RENDER_JS: Record<VizId, string> = {
   'variant-performance': `
     window.__render = function(data){
       var variants = (data && data.variants) || [];
-      var winText = 'current vs prior period';
+      var winText = 'selected window';
       if (data && data.window && data.window.start && data.window.end) {
-        winText = String(data.window.start).slice(0, 10) + ' to ' + String(data.window.end).slice(0, 10) + ' vs prior period';
+        winText = String(data.window.start).slice(0, 10) + ' to ' + String(data.window.end).slice(0, 10);
       }
-      el('sub').textContent = variants.length + ' variant' + (variants.length === 1 ? '' : 's') + ' · conversion, ' + winText;
+      el('sub').textContent = variants.length + ' variant' + (variants.length === 1 ? '' : 's') + ' · conversion, ' + winText + ' · only an evidence verdict is a comparison';
       if (!variants.length) { showEmpty('No variant data available yet.'); return; }
-      var max = variants.reduce(function(m,v){ return Math.max(m, v.currentCvr || 0); }, 0) || 1;
-      var sorted = variants.slice().sort(function(a,b){ return (b.currentCvr||0) - (a.currentCvr||0); });
+      // Grouped by component, never sorted by raw rate: a rate-ordered list
+      // reads as a ranking the evidence may not support.
+      var sorted = variants.slice().sort(function(a,b){
+        return String(a.componentId).localeCompare(String(b.componentId)) || (b.isBaseline ? 1 : 0) - (a.isBaseline ? 1 : 0);
+      });
+      var verdictText = { baseline: 'baseline', ahead: 'ahead of baseline (strong evidence)', behind: 'behind baseline (strong evidence)',
+        unclear: 'not separated from baseline', no_evidence: 'no evidence available' };
       el('viz').innerHTML = sorted.map(function(v){
-        var cur = (v.currentCvr || 0) * 100;
-        var dp = Number(v.deltaPp) || 0;
-        var dir = dp > 0.05 ? 'up' : dp < -0.05 ? 'down' : 'flat';
-        var arrow = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '—';
-        var sign = dp > 0 ? '+' : '';
-        var deltaHtml = '<span class="delta ' + dir + '">' + arrow + ' ' + sign + dp.toFixed(1) + ' pp</span>';
-        var head = '<div class="row-head"><span class="label">' + esc(v.variantId) +
-          '</span><span class="val">' + cur.toFixed(2) + '% ' + deltaHtml + '</span></div>';
-        return '<div class="row">' + head +
-          '<div class="track"><span class="bar" style="width:' + clampPct((v.currentCvr || 0) / max * 100) + '%"></span></div>' +
-          '<div class="meta">prior ' + ((v.priorCvr||0)*100).toFixed(2) + '% · momentum ' + esc(v.momentum || 'stable') + '</div></div>';
+        var n = Number(v.sessions) || 0;
+        var rate = v.currentCvr == null ? null : v.currentCvr * 100;
+        var val = rate == null ? 'no rate' : rate.toFixed(2) + '%';
+        var meta = (v.conversions || 0) + '/' + n + ' sessions' + (v.lowSample ? ' · low sample' : '') +
+          ' · ' + (verdictText[v.verdict] || 'no evidence available') +
+          // The verdict judges this window's rate only when the server sent
+          // window evidence; otherwise it is the all-time one, and says so.
+          (v.isBaseline ? '' : v.verdictBasis === 'window' ? ' in this window' : v.verdictBasis === 'all_time' ? ' (all time)' : '');
+        return barRow(v.componentId + ' / ' + v.variantId, val, rate == null ? 0 : rate, meta);
       }).join('');
     };
   `,
@@ -186,9 +189,11 @@ const RENDER_JS: Record<VizId, string> = {
       if (!goals.length) { showEmpty('No goals configured for this project.'); return; }
       el('viz').innerHTML = goals.map(function(g){
         var cr = (g.conversionRate || 0) * 100;
-        var best = (g.variants || []).slice().sort(function(a,b){ return (b.completionRate||0)-(a.completionRate||0); })[0];
+        // No "best" variant: picking the top raw completion rate named a winner
+        // no evidence backed (a 1/1 arm beat a 300/1000 one).
+        var nv = (g.variants || []).length;
         var meta = g.hits + ' hits · ' + g.uniqueSessions + ' unique sessions' +
-          (best ? ' · best: ' + esc(best.componentId + '/' + best.variantId) + ' ' + ((best.completionRate||0)*100).toFixed(1) + '%' : '');
+          (nv ? ' · ' + nv + ' variant rate' + (nv === 1 ? '' : 's') + ' (all-time, see text)' : '');
         return barRow(g.goalName, pct1(cr), cr, meta);
       }).join('');
     };

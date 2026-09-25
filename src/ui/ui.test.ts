@@ -67,6 +67,20 @@ describe('buildTemplate', () => {
   }
 });
 
+describe('templates never rank arms by raw rate (S6)', () => {
+  it('variant-performance groups by component and shows n + verdict, not a CVR sort', () => {
+    const html = buildTemplate('variant-performance');
+    expect(html).not.toMatch(/b\.currentCvr\|\|0\) - \(a\.currentCvr/);
+    expect(html).toContain('v.componentId');
+    expect(html).toContain('v.verdict');
+    expect(html).toContain('sessions');
+  });
+
+  it('goal-funnel no longer crowns a "best" variant by raw completion rate', () => {
+    expect(buildTemplate('goal-funnel')).not.toContain('best:');
+  });
+});
+
 describe('data-viz tools carry _meta.ui', () => {
   function captureTool(register: (s: any, c: ApiClient) => void) {
     const configs: Record<string, any> = {};

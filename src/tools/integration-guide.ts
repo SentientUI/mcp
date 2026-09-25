@@ -11,7 +11,7 @@ DECLARED by the app when it already knows the visitor's role: init({ persona: 'a
 <AdaptiveProvider persona=...> / window.sentient.persona. Declared beats inferred and serves
 at full confidence; unrecognized values are ignored server-side and surfaced in the dashboard
 so the operator can add them. Keep persona a low-cardinality role slug — never a user id.
-Decisions are locked per session: Visit 1 learns, Visit 2 converts. Integrate one rung at a
+Decisions are locked per session: a first visit sees the original, the return visit adapts. Integrate one rung at a
 time.
 
 ## Setup (60 seconds, no account)
@@ -24,6 +24,10 @@ time.
    and add suppressHydrationWarning to <html> — an inline script sets persona attributes
    pre-paint. Nothing adapts and nothing is tracked until this wrap is in place. Declare no
    components here: every <Adaptive> registers itself when it renders (see Rung 2).
+   If the site has a cookie banner, gate on it: consentFrom="cookiebot" | "onetrust" |
+   "cookieyes" | "tcf" | "google-consent-mode" | "shopify" on the wrap (or consent={accepted}).
+   Without a gate the SDK tracks from the first page view — for EU/UK traffic that needs consent.
+   Ask the developer which banner they use; never guess one (a wrong preset gates every visitor).
 3. \`npm run dev\`, then open the app with \`?sentient_persona=a\` vs
    \`?sentient_persona=b\` to see it adapt — in keyless local mode any key drives the built-in
    heuristic. No API key needed. Against a real project the key must be one you declared.
@@ -119,6 +123,10 @@ pre-paint script alone, then the loader (renderSnippetInstall({ config, split: t
 combined tag contains the site's config, so its hash differs per site; the split pre-paint tag is
 byte-identical everywhere, so one hash covers it. Existing three-tag and config + loader installs
 keep working.
+
+Consent: add consentFrom (same presets as above) to window.sentient when the site has a cookie
+banner, or consent: false plus SentientSnippet.grantConsent() on accept. On Shopify, snippet 0.32
+and later follows Shopify's Customer Privacy API automatically.
 
 ## Capture AI assistants (server-side, any framework)
 
