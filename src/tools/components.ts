@@ -160,7 +160,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
               evidenceState: z
                 .string()
                 .nullable()
-                .describe('Reliability (all time): the server\'s ALL-TIME evidence state vs the baseline on direct evidence — not_enough_data | early_signal | moderate_evidence | strong_evidence | inconclusive; null for the baseline or when not provided. Not a verdict on the windowed rate'),
+                .describe('Reliability (all time): the server\'s ALL-TIME evidence state vs the baseline on direct evidence — not_enough_data | early_signal | moderate_evidence | strong_evidence | likely_worse | inconclusive; null for the baseline or when not provided. Not a verdict on the windowed rate'),
               probBeatsBaseline: z.number().nullable().describe('P(this arm > baseline), all-time, from the server; null when not provided'),
               reliabilityVerdict: z
                 .enum(['baseline', 'ahead', 'behind', 'unclear', 'no_evidence'])

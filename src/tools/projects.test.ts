@@ -138,3 +138,34 @@ describe('create_project', () => {
     await expect(server.tools['create_project']!.handler({ name: 'X' })).rejects.toThrow('create_failed');
   });
 });
+
+describe('add_origin', () => {
+  it('posts the origin and echoes the allow-list delimited', async () => {
+    const client = new ApiClient({ apiKey: 'sk_test' });
+    const postSpy = vi.spyOn(client, 'post').mockResolvedValue({ origins: ['https://shop.example.com'] });
+    const server = makeServer();
+    registerProjectTools(server as any, client);
+    const result = await server.tools['add_origin']!.handler({
+      projectId: '00000000-0000-0000-0000-000000000001',
+      origin: 'https://shop.example.com/cart',
+    });
+    expect(postSpy).toHaveBeenCalledWith('/projects/00000000-0000-0000-0000-000000000001/origins', {
+      origin: 'https://shop.example.com/cart',
+    });
+    expect(result.content[0].text).toContain('`https://shop.example.com`');
+  });
+});
+
+// Audit M18: agentCalls was described as "MCP/API" calls, but the API counts
+// agent_events — /v1/agent calls only.
+describe('get_project_stats agentCalls wording', () => {
+  it('names the /v1/agent API, not MCP', async () => {
+    const client = new ApiClient({ apiKey: 'sk_test' });
+    vi.spyOn(client, 'get').mockResolvedValue({ status: 'ok', events24h: 1, sessions24h: 1, agentCalls: 7, lastEventAt: null });
+    const server = makeServer();
+    registerProjectTools(server as any, client);
+    const result = await server.tools['get_project_stats']!.handler({ projectId: '00000000-0000-0000-0000-000000000001' });
+    expect(result.content[0].text).toContain('Agent API calls (/v1/agent, all-time): 7');
+    expect(result.content[0].text).not.toMatch(/MCP/);
+  });
+});

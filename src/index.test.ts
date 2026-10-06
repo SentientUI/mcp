@@ -93,4 +93,17 @@ describe('SENTIENTUI_API_KEY resolution', () => {
     );
     expect(exitSpy).not.toHaveBeenCalled();
   });
+
+  it('a pk_ publishable key → fatal at startup, never a server that 401s on every call', async () => {
+    // A pk_ key used to boot fine and fail on the first tool call with a bare
+    // 401 the agent could not explain. It must fail where the config is fixed.
+    process.env.SENTIENTUI_API_KEY = 'pk_live_abc';
+    await importIndex();
+    await vi.waitFor(() => expect(exitSpy).toHaveBeenCalledWith(1));
+
+    expect(stderrSpy.mock.calls.map((c) => String(c[0])).join('')).toContain('pk_ publishable key');
+    expect(mocks.resolveDemoToken).not.toHaveBeenCalled();
+    expect(mocks.ApiClient).not.toHaveBeenCalled();
+    expect(mocks.connect).not.toHaveBeenCalled();
+  });
 });

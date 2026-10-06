@@ -137,6 +137,22 @@ describe('get_variant_brief — evidence state is keyed on server evidence tiers
     expect(text).toContain('Only one arm is serving');
   });
 
+  // A likely_worse arm is DIRECTIONAL (moderate strength, mirrored), never
+  // "did not separate" and never DECIDED unless it also clears the strong bar.
+  it('names a likely-worse arm as probably behind without calling it decided', async () => {
+    const text = await run({
+      ...baseResponses,
+      components: component([
+        { variant_id: 'control', exposed_sessions: 400, conversions: 40, evidence_state: null, evidence_stats: null },
+        { variant_id: 'v_b', exposed_sessions: 400, conversions: 30, evidence_state: 'likely_worse', evidence_stats: stats(0.1) },
+      ]),
+    });
+    expect(text).toContain('## Evidence state: DIRECTIONAL');
+    expect(text).toContain('Probably behind the baseline (not decided)');
+    expect(text).toContain('Likely worse than the baseline');
+    expect(text).not.toContain('clearly different change');
+  });
+
   it('tells the agent inconclusive means make a clearly different change', async () => {
     const text = await run({
       ...baseResponses,
@@ -243,7 +259,7 @@ describe('get_variant_brief — formatting', () => {
   it('shows each variant with n and its evidence, never a raw-rate ranking', async () => {
     const text = await run(baseResponses);
     expect(text).toContain('- `control`: 10.00% (40/400 sessions) · baseline');
-    expect(text).toContain('- `v_b`: 7.50% (30/400 sessions) · evidence: Early signal (still moving — not a result) — not separated from the baseline');
+    expect(text).toContain('- `v_b`: 7.50% (30/400 sessions) · evidence: Early signal (still moving — not a result) — not reliably separated from the baseline');
   });
 
   it('names an arbitrary baseline as arbitrary', async () => {

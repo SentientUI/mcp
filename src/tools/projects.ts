@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ApiClient } from '../api-client.js';
-import { projectIdSchema, withApiErrorGuidance, type ExtraGuidance } from './common.js';
+import { projectIdSchema, untrusted, withApiErrorGuidance, type ExtraGuidance } from './common.js';
 
 // Create-specific codes the shared mapper doesn't know. Auth-mode refusals
 // (insufficient_scope / demo_read_only / insufficient_role) intentionally fall
@@ -74,6 +74,44 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
     }, CREATE_PROJECT_GUIDANCE),
   );
 
+  // Audit M13: create_project could allow-list ONE origin at creation, but a
+  // project whose site moved (or that has a staging origin) had no MCP way to
+  // add another, so the SDK's events stayed origin-blocked until someone found
+  // the dashboard setting.
+  server.registerTool(
+    'add_origin',
+    {
+      title: 'Add allowed origin',
+      description:
+        "Allow-list a site origin (scheme + host, e.g. https://www.example.com) so the SDK's events from it are accepted. " +
+        'Idempotent: an origin already on the list is left as is. Removing an origin is dashboard-only. Needs an editor/admin ' +
+        "login or the project's sk_ server key. Confirm the exact origin with the user first — an allowed origin can send events into this project.",
+      inputSchema: {
+        projectId: projectIdSchema,
+        origin: z.string().min(1).max(500).describe('The site origin, e.g. https://www.example.com (a pasted page URL is reduced to its origin)'),
+      },
+      outputSchema: {
+        origins: z.array(z.string()).describe('The full allow-list after the change'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    withApiErrorGuidance(async ({ projectId, origin }) => {
+      const id = encodeURIComponent(projectId);
+      const res = await client.post<{ origins: string[] }>(`/projects/${id}/origins`, { origin });
+      const origins = res.origins ?? [];
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `Allowed origins: ${origins.map((o) => untrusted(o)).join(', ') || '(none)'}. Events from these origins are accepted (other API instances pick the change up within ~30 seconds, when their key cache expires).`,
+        }],
+        structuredContent: { origins },
+      };
+    }, {
+      invalid_origin: 'That is not a usable origin. Pass a scheme and host, e.g. https://www.example.com.',
+      origin_required: 'An origin is required, e.g. https://www.example.com.',
+    }),
+  );
+
   server.registerTool(
     'list_projects',
     {
@@ -130,13 +168,18 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
     'get_project_stats',
     {
       title: 'Project health stats',
-      description: 'Get health stats for a project: event volume, session count, agent calls, and status.',
+      description:
+        'Get ingestion health for a project: status, events and sessions in the last 24 hours, the time of the last event, ' +
+        'and the all-time count of calls to the SentientUI agent API (/v1/agent) — NOT MCP tool calls.',
       inputSchema: { projectId: projectIdSchema },
       outputSchema: {
         status: z.string().describe('Overall project health status'),
         events24h: z.number().describe('Events in the last 24 hours'),
         sessions24h: z.number().describe('Sessions in the last 24 hours'),
-        agentCalls: z.number().describe('Total agent (MCP/API) calls'),
+        // Was "Total agent (MCP/API) calls" — but the count comes from
+        // agent_events, which only the /v1/agent endpoint writes. MCP tool calls
+        // are never in it, so an agent read its own activity as missing.
+        agentCalls: z.number().describe('All-time calls to the /v1/agent agent API (not MCP tool calls)'),
         lastEventAt: z.string().nullable().describe('ISO timestamp of the last event, or null'),
       },
       annotations: {
@@ -159,7 +202,7 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
         `Status: ${stats.status}`,
         `Events (24h): ${stats.events24h}`,
         `Sessions (24h): ${stats.sessions24h}`,
-        `Agent calls (total): ${stats.agentCalls}`,
+        `Agent API calls (/v1/agent, all-time): ${stats.agentCalls}`,
         `Last event: ${stats.lastEventAt ?? 'never'}`,
       ].join('\n');
 

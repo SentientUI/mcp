@@ -11,17 +11,19 @@ SentientUI adapts a website per visitor type (personas are the keys your app dec
 
 - **Hosted (recommended):** `https://api.sentient-ui.com/mcp` — Streamable HTTP, OAuth 2.1, no key to paste.
   In Claude Code: `claude mcp add --transport http sentientui https://api.sentient-ui.com/mcp`
-- **Local:** `npx @sentientui/mcp` with `SENTIENTUI_API_KEY=sk_...` (omit for a read-only demo).
+- **Local:** `npx @sentientui/mcp` with `SENTIENTUI_API_KEY=sk_...` (one key per project, every plan; omit it for a read-only demo against an empty sandbox project).
 
 Discovery (`initialize`, `tools/list`) is public; tool calls require auth.
 
 ## What the tools do
 
-**Read:** `list_projects`, `get_project_stats`, `list_components`, `get_variant_performance` (CVR + momentum), `get_persona_breakdown`, `get_goal_funnel`, `get_layout_stats`, `get_insights`, `list_guardrail_events`. Every tool declares an `outputSchema` and returns `structuredContent`, so responses are type-checkable.
+<!-- mcp-tools:start -->
+**Read:** `list_projects`, `get_project_stats`, `list_components`, `get_variant_performance` (rates with n + evidence verdict), `get_variant_brief`, `get_test_brief`, `get_goal_funnel`, `list_goals`, `list_funnels`, `get_funnel_report`, `list_guardrail_events`, `get_persona_breakdown`, `get_layout_stats`, `get_insights`, `get_cell_matrix`, `get_cell_detail`, `list_cell_reviews`, `get_agent_traffic`, `get_agent_legibility`, `get_integration_guide`. Every tool declares an `outputSchema` and returns `structuredContent`, so responses are type-checkable.
 
-**Act:** `refresh_insights`, `create_variant` (no-code managed text), `pause_variant`.
+**Act** (confirm each with the user — they change what real visitors see): `create_project`, `add_origin`, `define_goal` (create-only: never overwrites a goal or changes the primary), `create_variant` (no-code managed text draft), `update_variant` (edit, or `status: active` to serve a draft), `delete_variant_draft`, `pause_variant` / `resume_variant`, `retire_variant` / `restore_variant`, `refresh_insights`, `generate_cell`, `review_cell`.
+<!-- mcp-tools:end -->
 
-**Author variants in code:** `get_variant_brief` returns an insight-driven, data-sufficiency-aware brief for writing a new code-native variant; `get_test_brief` returns paste-ready deterministic tests; `get_integration_guide` returns the full setup ladder.
+**Author variants in code:** `get_variant_brief` returns an evidence-driven brief for writing a new code-native variant; `get_test_brief` returns paste-ready deterministic tests; `get_integration_guide` returns the full setup ladder.
 
 ## Typical flows
 

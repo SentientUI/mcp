@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { ToolHandler } from './test-utils.js';
-import { ApiClient } from '../api-client.js';
+import { ApiClient, ApiError } from '../api-client.js';
 import { registerGoalTools } from './goals.js';
 
 function makeServer() {
@@ -274,5 +274,47 @@ describe('get_goal_funnel — all-time variant rates are labelled as such', () =
       goals: [{ goalName: 'lead', hits: 1, uniqueSessions: 1, pct: 0.5, variants: [] }],
     });
     expect(text).not.toContain('all-time');
+  });
+});
+
+// Audit M13: define_goal must only ever reach the create-only endpoint — the
+// overwriting PUT (which can also re-point the primary goal) is never called.
+describe('define_goal', () => {
+  const PID = '00000000-0000-0000-0000-000000000001';
+  function setup() {
+    const client = new ApiClient({ apiKey: 'sk_test' });
+    const post = vi.spyOn(client, 'post');
+    const other = [vi.spyOn(client, 'patch'), vi.spyOn(client, 'delete')];
+    const server = makeServer();
+    registerGoalTools(server as any, client);
+    return { post, other, handler: server.tools['define_goal']!.handler };
+  }
+
+  it('POSTs to the create-only collection route with only the fields given', async () => {
+    const { post, other, handler } = setup();
+    post.mockResolvedValue({ ok: true, goalId: 'signup', role: 'secondary' });
+    const result = await handler({ projectId: PID, goalId: 'signup', event: 'url_reached', urlPattern: '/welcome' });
+    expect(post).toHaveBeenCalledWith(`/projects/${PID}/goal-definitions`, { goalId: 'signup', event: 'url_reached', urlPattern: '/welcome' });
+    for (const spy of other) expect(spy).not.toHaveBeenCalled();
+    expect(result.structuredContent).toEqual({ goalId: 'signup', role: 'secondary' });
+    expect(result.content[0].text).toContain('primary goal was not changed');
+  });
+
+  it('explains an existing id instead of overwriting it', async () => {
+    const { post, handler } = setup();
+    post.mockRejectedValue(new ApiError(409, 'goal_exists', 'A goal with id "signup" already exists in this project (it may be archived).'));
+    const result = await handler({ projectId: PID, goalId: 'signup', event: 'url_reached', urlPattern: '/welcome' });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/never changes an existing goal/);
+  });
+
+  it('an API that predates create-only goals is reported, not retried as an upsert', async () => {
+    const { post, other, handler } = setup();
+    post.mockRejectedValue(new ApiError(404, 'Not Found'));
+    const result = await handler({ projectId: PID, goalId: 'signup', event: 'url_reached', urlPattern: '/welcome' });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toMatch(/predates create-only goals/);
+    expect(post).toHaveBeenCalledTimes(1);
+    for (const spy of other) expect(spy).not.toHaveBeenCalled();
   });
 });

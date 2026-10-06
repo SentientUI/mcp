@@ -18,6 +18,17 @@ async function main() {
     );
   }
 
+  // A pk_ publishable key is the SDK's browser key, not a management credential.
+  // It used to start the server happily and fail on the FIRST tool call with a
+  // bare 401, so the agent blamed the tool (or the user's project) rather than
+  // the config. Refuse it at startup, where the fix is one env var away.
+  if (apiKey && /^pk_/i.test(apiKey)) {
+    throw new Error(
+      'SENTIENTUI_API_KEY is a pk_ publishable key — that key is for the browser SDK and cannot read or manage project data. ' +
+        'Use the project\'s sk_ server key (Dashboard → Settings → API keys → Server key), or connect by URL (https://api.sentient-ui.com/mcp) and sign in.',
+    );
+  }
+
   if (!apiKey) {
     apiKey = await resolveDemoToken();
     refreshApiKey = refreshDemoToken;

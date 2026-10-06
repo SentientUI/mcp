@@ -2,6 +2,14 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /**
+     * The server's human sentence (body.message / body.reason), kept beside the
+     * machine code. The code alone is what apiErrorGuidance matches on, but
+     * dropping the sentence meant a 409 "Unpromote this variant before hiding
+     * it." or a 400 "a URL-reached goal needs a URL pattern" reached the agent
+     * as a bare `variant_promoted` / `invalid_goal` with no way to act on it.
+     */
+    public detail?: string,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -34,6 +42,14 @@ export class ApiClient {
 
   async post<T = unknown>(path: string, body?: unknown): Promise<T> {
     return this.request<T>('POST', path, body);
+  }
+
+  async patch<T = unknown>(path: string, body?: unknown): Promise<T> {
+    return this.request<T>('PATCH', path, body);
+  }
+
+  async delete<T = unknown>(path: string, body?: unknown): Promise<T> {
+    return this.request<T>('DELETE', path, body);
   }
 
   private async request<T>(method: string, path: string, body?: unknown, isRetry = false): Promise<T> {
@@ -72,6 +88,8 @@ export class ApiClient {
     // that send message alone (or message with details) surface as a bare
     // statusText — falling back keeps the code exact-matchable when present
     // and the message visible when it is all there is.
-    throw new ApiError(res.status, String(errBody.error ?? errBody.message ?? res.statusText));
+    const code = String(errBody.error ?? errBody.message ?? res.statusText);
+    const human = errBody.message ?? errBody.reason;
+    throw new ApiError(res.status, code, typeof human === 'string' && human !== code ? human : undefined);
   }
 }

@@ -17,6 +17,7 @@ export type EvidenceStateId =
   | 'early_signal'
   | 'moderate_evidence'
   | 'strong_evidence'
+  | 'likely_worse'
   | 'inconclusive';
 
 /** CONTRACTS.md §5 "Minimum sample before any evidence claim". Used here only
@@ -29,6 +30,10 @@ export const EVIDENCE_LABEL: Record<EvidenceStateId, string> = {
   early_signal: 'Early signal (still moving — not a result)',
   moderate_evidence: 'Moderate evidence (about one call in five of this strength is wrong — not decided)',
   strong_evidence: 'Strong evidence',
+  // The mirror of moderate_evidence. Before the server had it, an arm clearly
+  // behind its baseline read "Inconclusive (… without separating)" — it HAD
+  // separated, downward.
+  likely_worse: 'Likely worse than the baseline (about one call in five of this strength is wrong — not decided)',
   inconclusive: 'Inconclusive (ran a full period without separating from the baseline)',
 };
 
@@ -128,7 +133,9 @@ export function verdictOf(
 export const VERDICT_TEXT: Record<Exclude<Verdict, 'baseline'>, string> = {
   ahead: 'reliably AHEAD of the baseline',
   behind: 'reliably BEHIND the baseline',
-  unclear: 'not separated from the baseline',
+  // "not RELIABLY": this is printed beside moderate_evidence and likely_worse
+  // labels too, and a bare "not separated" contradicted the label next to it.
+  unclear: 'not reliably separated from the baseline',
   no_evidence: 'no evidence available from the server',
 };
 

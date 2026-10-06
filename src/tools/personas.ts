@@ -9,7 +9,12 @@ export function registerPersonaTools(server: McpServer, client: ApiClient): void
     'get_persona_breakdown',
     {
       title: 'Persona breakdown',
-      description: 'Get the distribution of visitor persona clusters with session counts and reliability scores.' + UNTRUSTED_FIELDS_NOTE,
+      // Takes no range/from/to on purpose: the API computes it over every
+      // retained session and has no window. Saying so stops an agent from
+      // reading it beside a 7d get_variant_performance as the same period.
+      description:
+        'Get the distribution of visitor persona clusters with session counts and reliability scores, over ALL retained ' +
+        'human sessions (not windowed — this has no range input, unlike the conversion tools).' + UNTRUSTED_FIELDS_NOTE,
       inputSchema: { projectId: projectIdSchema },
       _meta: uiMeta('persona-breakdown'),
       outputSchema: {

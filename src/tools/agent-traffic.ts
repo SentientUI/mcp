@@ -1,7 +1,18 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ApiClient } from '../api-client.js';
-import { projectIdSchema, withApiErrorGuidance, untrusted, UNTRUSTED_FIELDS_NOTE } from './common.js';
+import {
+  projectIdSchema,
+  rangeInputSchema,
+  rangeQuery,
+  windowLine,
+  windowOutputSchema,
+  withApiErrorGuidance,
+  untrusted,
+  UNTRUSTED_FIELDS_NOTE,
+  type RangeArgs,
+  type WindowMeta,
+} from './common.js';
 
 const PLAN_GATE_GUIDANCE = {
   agent_analytics_requires_paid_plan:
@@ -14,6 +25,7 @@ type Summary = {
   topPaths: Array<{ path: string; count: number; engines: number }>;
   daily: Array<{ day: string; crawler: number; api: number; browser: number }>;
   intents: { user: number; search: number; training: number; other: number };
+  window?: NonNullable<WindowMeta>;
 };
 
 type Legibility = {
@@ -33,15 +45,12 @@ export function registerAgentTrafficTools(server: McpServer, client: ApiClient):
     {
       title: 'Agent traffic',
       description:
-        'Which AI agents and crawlers are reading this site: totals by type (passive crawlers, agentic browsers, agent API calls), engine breakdown, and the paths they fetch most. Defaults to the last 30 days; pass from/to for a custom period (agent logs are retained 30 days on Free/Starter, 90 on Growth+). Agent traffic is tracked separately and never counted in conversion rate.' + UNTRUSTED_FIELDS_NOTE,
-      inputSchema: {
-        projectId: projectIdSchema,
-        from: z
-          .string()
-          .optional()
-          .describe('Period start (ISO 8601 date or timestamp). Defaults to 30 days ago.'),
-        to: z.string().optional().describe('Period end (ISO 8601 date or timestamp). Defaults to now.'),
-      },
+        'Which AI agents and crawlers are reading this site: totals by type (passive crawlers, agentic browsers, agent API calls), engine breakdown, and the paths they fetch most. Defaults to the last 30 calendar days; pass range (7d/30d/90d/all) or from/to (YYYY-MM-DD) like every other windowed tool (agent logs are retained 30 days on Free/Starter, 90 on Growth+). Agent traffic is tracked separately and never counted in conversion rate.' + UNTRUSTED_FIELDS_NOTE,
+      // This tool alone took ad-hoc ISO from/to with no range token and echoed
+      // no window, while every other windowed tool used rangeInputSchema — so
+      // agents passed range:'7d' here, it was silently dropped, and 30 days of
+      // traffic was reported as a week. The endpoint uses the shared resolver.
+      inputSchema: { projectId: projectIdSchema, ...rangeInputSchema('30d') },
       outputSchema: {
         totals: z.object({ crawler: z.number(), api: z.number(), browser: z.number() }),
         engines: z.array(
@@ -54,23 +63,17 @@ export function registerAgentTrafficTools(server: McpServer, client: ApiClient):
         intents: z.object({ user: z.number(), search: z.number(), training: z.number(), other: z.number() })
           .describe('Crawler fetches by purpose: user = an assistant answering a real person live'),
         topPaths: z.array(z.object({ path: z.string(), count: z.number(), engines: z.number() })),
+        window: windowOutputSchema,
       },
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
     },
-    withApiErrorGuidance(async ({ projectId, from, to }: { projectId: string; from?: string; to?: string }) => {
+    withApiErrorGuidance(async ({ projectId, range, from, to }: { projectId: string } & RangeArgs) => {
       const id = encodeURIComponent(projectId);
-      const qs = new URLSearchParams();
-      if (from) qs.set('from', from);
-      if (to) qs.set('to', to);
-      // Gate on toString(), not .size: URLSearchParams.size is Node 19.8+, and
-      // the README promises Node 18 — there `.size` is undefined, `undefined > 0`
-      // is false, and from/to were silently dropped (the default window answered
-      // as if it were the one asked for). Matches common.ts rangeQuery.
-      const query = qs.toString();
       const s = await client.get<Summary>(
-        `/projects/${id}/agent-activity/summary${query ? `?${query}` : ''}`,
+        `/projects/${id}/agent-activity/summary${rangeQuery({ range, from, to })}`,
       );
-      const structuredContent = { totals: s.totals, engines: s.engines, intents: s.intents, topPaths: s.topPaths };
+      const structuredContent = { totals: s.totals, engines: s.engines, intents: s.intents, topPaths: s.topPaths, window: s.window };
+      const win = windowLine(s.window);
 
       const total = s.totals.crawler + s.totals.api + s.totals.browser;
       if (total === 0) {
@@ -84,6 +87,7 @@ export function registerAgentTrafficTools(server: McpServer, client: ApiClient):
       }
 
       const lines = [
+        ...(win ? [win] : []),
         `Agent traffic: ${s.totals.crawler} crawler fetches, ${s.totals.api} agent API calls, ${s.totals.browser} agentic browser sessions.`,
         `Live user fetches: ${s.intents.user} · Search index: ${s.intents.search} · Training: ${s.intents.training}${s.intents.other ? ` · Other: ${s.intents.other}` : ''} (a "live user fetch" = an AI assistant reading your site to answer a real person).`,
         '',

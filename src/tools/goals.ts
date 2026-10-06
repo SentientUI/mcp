@@ -19,15 +19,21 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
   server.registerTool(
     'get_goal_funnel',
     {
-      title: 'Goal funnel',
+      // Named get_goal_funnel for compatibility (renaming a published tool
+      // breaks every saved prompt and host allow-list), but it is NOT a funnel:
+      // agents asked it for step drop-off and reported per-goal rates as funnel
+      // stages. The title and the first words of the description now say what
+      // it is, and point to the real funnel tool.
+      title: 'Goal conversions (per goal — not a step funnel)',
       description:
-        'Get goal hit counts and unique-session conversion rates for a window ' +
+        'Per-goal conversion summary — NOT a step funnel (for step-by-step drop-off use list_funnels + get_funnel_report). ' +
+        'Gets goal hit counts and unique-session conversion rates for a window ' +
         '(default: last 30 calendar days), plus a per-variant breakdown. NOTE: the per-variant ' +
         'completionRate values are ALL-TIME (bounded only by plan retention), NOT windowed — a ' +
         'variant completion rate needs the full assignment history as its denominator, so it does ' +
         'not change when you narrow `range`, and retired components keep appearing in it. Only ' +
-        'hits/uniqueSessions/conversionRate/revenue respect the window. This is a flat per-goal ' +
-        'list — for multi-step funnel drop-off, use get_funnel_report.' + UNTRUSTED_FIELDS_NOTE,
+        'hits/uniqueSessions/conversionRate/revenue respect the window. Per-variant rates are descriptive, ' +
+        'not joined to the evidence verdicts — for whether an arm is ahead, use get_variant_performance.' + UNTRUSTED_FIELDS_NOTE,
       inputSchema: { projectId: projectIdSchema, ...rangeInputSchema('30d') },
       _meta: uiMeta('goal-funnel'),
       outputSchema: {
@@ -260,6 +266,82 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
       }
       lines.push('', 'Reference a goalId verbatim from code: client.goal(\'<goalId>\') or <Adaptive goal="<goalId>">.');
       return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent };
+    }),
+  );
+
+  // Audit M13. The mgmt PUT that the dashboard uses is an overwriting upsert
+  // that can also re-point the project's primary goal — the reward every
+  // experiment optimizes — so it was never exposed here. This calls the
+  // create-only POST instead: an existing id (even archived) is refused with
+  // 409, and the server never assigns or demotes a primary. An API that
+  // predates the POST answers 404 rather than falling back to the upsert.
+  server.registerTool(
+    'define_goal',
+    {
+      title: 'Define a new goal',
+      description:
+        'Create a NEW goal (conversion signal) for a project. Create-only: it never changes an existing goal — an id ' +
+        'that already exists, including an archived one, is refused (goal_exists); call list_goals first. It never sets ' +
+        "or changes the PRIMARY goal (what experiments optimize): the goal is created as 'secondary' (default) or " +
+        "'guardrail'; choosing the primary stays a dashboard decision. A guardrail goal can pause variants that hurt it — " +
+        'say so when proposing one. Event types: url_reached (needs urlPattern, e.g. /thank-you), click / form_submit ' +
+        '(need a locator, usually easier to pick in the dashboard on-site editor, or fire from code with ' +
+        "client.goal('<goalId>') instead), scroll_depth (needs threshold in (0, 1]). Needs an editor/admin login or the " +
+        "project's sk_ server key. Confirm the goal id, event and pattern with the user before calling.",
+      inputSchema: {
+        projectId: projectIdSchema,
+        goalId: z
+          .string()
+          .min(1)
+          .max(128)
+          .refine((s) => !s.startsWith('funnel:'), "'funnel:' is reserved for funnel bindings")
+          .describe("Stable id code will reference, e.g. 'signup' or 'checkout-complete'. Must not exist yet."),
+        event: z.enum(['url_reached', 'click', 'form_submit', 'scroll_depth']).describe('What counts as a conversion'),
+        urlPattern: z.string().min(1).max(512).optional().describe("url_reached only: the path pattern, e.g. '/thank-you' or '/orders/*'"),
+        locator: z.record(z.unknown()).optional().describe('click / form_submit only: the element locator (e.g. { "id": "signup-button" })'),
+        threshold: z.number().gt(0).max(1).optional().describe('scroll_depth only: how far down the page counts, in (0, 1]'),
+        displayName: z.string().min(1).max(128).optional().describe('Human-readable name shown in the dashboard'),
+        role: z
+          .enum(['secondary', 'guardrail'])
+          .optional()
+          .describe("secondary (default) is tracked and reported; guardrail can also pause variants that hurt it. Never 'primary'."),
+        defaultValue: z.number().positive().max(1_000_000_000).optional().describe('Fixed worth of one conversion in the project currency (revenue goals)'),
+      },
+      outputSchema: {
+        goalId: z.string(),
+        role: z.enum(['secondary', 'guardrail']).describe('Never primary — this tool cannot change the primary goal'),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    withApiErrorGuidance(async ({ projectId, goalId, event, urlPattern, locator, threshold, displayName, role, defaultValue }) => {
+      const id = encodeURIComponent(projectId);
+      const res = await client.post<{ ok: boolean; goalId?: string; role?: 'secondary' | 'guardrail' }>(`/projects/${id}/goal-definitions`, {
+        goalId,
+        event,
+        ...(urlPattern !== undefined ? { urlPattern } : {}),
+        ...(locator !== undefined ? { locator } : {}),
+        ...(threshold !== undefined ? { threshold } : {}),
+        ...(displayName !== undefined ? { displayName } : {}),
+        ...(role !== undefined ? { role } : {}),
+        ...(defaultValue !== undefined ? { defaultValue } : {}),
+      });
+      const structuredContent = { goalId: res.goalId ?? goalId, role: res.role ?? role ?? 'secondary' };
+      return {
+        content: [{
+          type: 'text' as const,
+          text:
+            `Created goal ${untrusted(structuredContent.goalId)} (${structuredContent.role}, ${event}). It is active now. ` +
+            'The primary goal was not changed — if this should be what experiments optimize, the owner can make it primary in the dashboard. ' +
+            "Reference the goalId verbatim from code (client.goal('<goalId>')) if the event is not tracked automatically.",
+        }],
+        structuredContent,
+      };
+    }, {
+      goal_exists: 'A goal with this id already exists (it may be archived). define_goal never changes an existing goal — pick a new id (see list_goals), or edit that goal in the dashboard.',
+      primary_not_allowed: 'define_goal never sets the primary goal. Create it as secondary; the owner can make it primary in the dashboard.',
+      invalid_goal_id: "That goal id is not allowed: use 1-128 characters, and not the reserved 'funnel:' prefix.",
+      invalid_goal: 'The goal definition is incomplete for its event type: url_reached needs urlPattern, click/form_submit need a locator, scroll_depth needs threshold.',
+      'Not Found': 'This SentientUI API does not support creating goals from MCP yet (it predates create-only goals). Define the goal in the dashboard instead.',
     }),
   );
 }

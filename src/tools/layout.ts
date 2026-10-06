@@ -9,7 +9,11 @@ export function registerLayoutTools(server: McpServer, client: ApiClient): void 
     'get_layout_stats',
     {
       title: 'Layout stats',
-      description: 'Get per-persona section layout rankings and bandit reward weights.' + UNTRUSTED_FIELDS_NOTE,
+      // No window by design: these are the bandit's cumulative pulls and reward,
+      // the state serving reads — not a report over a period.
+      description:
+        'Get per-persona section layout rankings with bandit pulls and average reward — the cumulative learning state ' +
+        'serving uses (not windowed; there is no range input). avgReward is a reward signal, not a conversion rate.' + UNTRUSTED_FIELDS_NOTE,
       inputSchema: { projectId: projectIdSchema },
       _meta: uiMeta('layout-stats'),
       outputSchema: {

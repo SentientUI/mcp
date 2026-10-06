@@ -9,8 +9,10 @@ export function registerGuardrailTools(server: McpServer, client: ApiClient): vo
     {
       title: 'List guardrail events',
       description:
-        'List every variant currently paused by a guardrail (a paused variant stops serving until unpaused, ' +
-        'however long ago the pause fired). Pass `days` to narrow to pauses fired within the last N days.' +
+        'List every variant currently paused (a paused variant stops serving until unpaused, however long ago the pause ' +
+        "fired). `source` says who paused it: 'guardrail' = automatically, for converting clearly worse; 'manual' = a " +
+        'teammate paused it by hand (do not suggest resuming those without asking who paused them). Pass `days` to narrow ' +
+        'to pauses fired within the last N days.' +
         UNTRUSTED_FIELDS_NOTE,
       inputSchema: {
         projectId: projectIdSchema,
@@ -27,9 +29,12 @@ export function registerGuardrailTools(server: McpServer, client: ApiClient): vo
           .array(
             z.object({
               componentId: z.string(),
-              variantIds: z.array(z.string()).describe('Variants paused by the guardrail'),
+              variantIds: z.array(z.string()).describe('Variants paused together'),
               pausedAt: z.string().nullable().describe('ISO timestamp the pause fired, or null'),
               funnelId: z.string().nullable().describe('Set when the pause came from a funnel guardrail'),
+              source: z
+                .enum(['guardrail', 'manual'])
+                .describe("'guardrail' = paused automatically; 'manual' = paused by a teammate"),
             }),
           )
           .describe('Currently paused variants (empty if none)'),
@@ -49,6 +54,8 @@ export function registerGuardrailTools(server: McpServer, client: ApiClient): vo
           variantIds: string[];
           pausedAt: string | null;
           funnelId?: string | null;
+          /** Absent from an API older than 2026-10-06, which listed manual pauses as guardrail ones. */
+          source?: 'guardrail' | 'manual';
         }>;
       }>(`/projects/${id}/guardrail-events${query}`);
 
@@ -58,11 +65,12 @@ export function registerGuardrailTools(server: McpServer, client: ApiClient): vo
           variantIds: e.variantIds,
           pausedAt: e.pausedAt,
           funnelId: e.funnelId ?? null,
+          source: e.source ?? ('guardrail' as const),
         })),
       };
 
       if (!data.guardrailEvents.length) {
-        const scope = days != null ? `paused by a guardrail in the last ${days} days` : 'currently paused by a guardrail';
+        const scope = days != null ? `paused in the last ${days} days` : 'currently paused';
         return {
           content: [{ type: 'text' as const, text: `No variants ${scope}.` }],
           structuredContent,
@@ -71,8 +79,10 @@ export function registerGuardrailTools(server: McpServer, client: ApiClient): vo
 
       // Component/variant ids are visitor-mintable via the public ingest path —
       // delimit them so a minted id can't pose as tool output (see untrusted()).
-      const lines = data.guardrailEvents.map((e) =>
-        `- ${untrusted(e.componentId)}: variants [${e.variantIds.map((v) => untrusted(v)).join(', ')}] paused${e.pausedAt ? ` at ${e.pausedAt}` : ''}${e.funnelId ? ` (protecting the ${untrusted(e.funnelId)} funnel)` : ''}`
+      const lines = structuredContent.events.map((e) =>
+        `- ${untrusted(e.componentId)}: variants [${e.variantIds.map((v) => untrusted(v)).join(', ')}] ` +
+        `${e.source === 'manual' ? 'paused by a teammate' : 'paused automatically by a guardrail'}` +
+        `${e.pausedAt ? ` at ${e.pausedAt}` : ''}${e.funnelId ? ` (protecting the ${untrusted(e.funnelId)} funnel)` : ''}`
       );
 
       return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent };

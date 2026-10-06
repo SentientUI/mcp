@@ -178,7 +178,9 @@ export type ExtraGuidance = Record<string, string>;
  */
 export function apiErrorGuidance(err: ApiError, extra?: ExtraGuidance): string | null {
   if (extra && Object.prototype.hasOwnProperty.call(extra, err.message)) {
-    return extra[err.message]!;
+    // Keep the server's sentence even when a tool supplies its own advice:
+    // e.g. review_cell's publish_failed carries WHY the publish failed.
+    return extra[err.message]! + detailSuffix(err);
   }
   switch (err.message) {
     case 'insufficient_scope':
@@ -187,6 +189,15 @@ export function apiErrorGuidance(err: ApiError, extra?: ExtraGuidance): string |
       return 'Demo mode is read-only. Create a SentientUI account and sign in (or use a project server key) to make changes.';
     case 'insufficient_role':
       return 'Your account role does not permit this action — it needs the account owner or an admin.';
+    // The mgmt write routes answer a viewer with `role_required` (and origins
+    // with `not_authorized`), not `insufficient_role` — so every role refusal
+    // fell through to the generic 403 "check your key has access" advice and
+    // sent the agent re-authenticating for a permission it already had wrong.
+    case 'role_required':
+    case 'not_authorized':
+      return `Your role on this project cannot make this change — it needs an editor or admin.${detailSuffix(err)}`;
+    case 'ai_unavailable':
+      return 'AI generation is unavailable on the SentientUI server right now (no model is configured). Nothing was queued — retry later.';
     default:
       break;
   }
@@ -245,9 +256,33 @@ export function apiErrorGuidance(err: ApiError, extra?: ExtraGuidance): string |
     return `This feature requires a higher plan (${err.message}). Upgrade your SentientUI plan, then try again.`;
   }
   if (err.status === 403) {
-    return `Access denied (${err.message}). Check that your key or login has access to this project.`;
+    return `Access denied (${err.message}). Check that your key or login has access to this project.${detailSuffix(err)}`;
+  }
+  // 404/400/409/5xx used to fall through to a rethrow, so the host showed a
+  // bare `not_found` / `invalid_request` / `variant_promoted` with no next step
+  // — and the server's own explanation (err.detail) was discarded with it.
+  if (err.status === 404) {
+    return (
+      `Not found (${err.message}). The project, component, variant, goal or cell does not exist, or this credential cannot see it ` +
+      '(an sk_ server key sees only its own project). Re-read the ids with list_projects, list_components, list_goals or get_cell_matrix and retry with an exact id.' +
+      detailSuffix(err)
+    );
+  }
+  if (err.status === 400) {
+    return `The API rejected the arguments (${err.message}).${detailSuffix(err)} Correct the input and retry — repeating the same call will fail the same way.`;
+  }
+  if (err.status === 409) {
+    return `Conflict (${err.message}): the target's current state does not allow this.${detailSuffix(err)} Read its current state first, then retry the step that makes this valid.`;
+  }
+  if (err.status === 502 || err.status === 503 || err.status === 504) {
+    return `SentientUI is temporarily unavailable (${err.status} ${err.message}). Nothing changed — wait a moment and retry.`;
   }
   return null;
+}
+
+/** The server's human sentence, when it sent one beyond the machine code. */
+function detailSuffix(err: ApiError): string {
+  return err.detail ? ` Server says: ${untrusted(err.detail, 300)}` : '';
 }
 
 /**

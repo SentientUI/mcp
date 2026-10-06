@@ -62,6 +62,32 @@ describe('get_agent_traffic', () => {
     await server.tools['get_agent_traffic']!.handler({ projectId: 'p1', from: '2026-08-01', to: '2026-08-15' });
     expect(paths[0]).toContain('?from=2026-08-01&to=2026-08-15');
   });
+
+  // range was not an input here, so an agent's range:'7d' was dropped and the
+  // 30-day default answered as if it were the week asked for.
+  it('forwards a range token like every other windowed tool', async () => {
+    const paths: string[] = [];
+    const server = setup((path) => {
+      paths.push(path);
+      return { totals: { crawler: 0, api: 0, browser: 0 }, engines: [], intents: { user: 0, search: 0, training: 0, other: 0 }, topPaths: [], daily: [] };
+    });
+    await server.tools['get_agent_traffic']!.handler({ projectId: 'p1', range: '7d' });
+    expect(paths[0]).toMatch(/\/agent-activity\/summary\?range=7d$/);
+  });
+
+  it('echoes the window the server used', async () => {
+    const server = setup(() => ({
+      totals: { crawler: 3, api: 0, browser: 0 },
+      engines: [{ engine: 'GPTBot', intent: 'training', count: 3, sharePct: 100, lastSeen: '2026-08-10', firstSeenInRange: false }],
+      intents: { user: 0, search: 0, training: 3, other: 0 },
+      topPaths: [],
+      daily: [],
+      window: { range: '7d', start: '2026-08-04T00:00:00Z', end: '2026-08-11T00:00:00Z', timezone: 'UTC', bucketUnit: 'day', retentionDays: 30, earliestAvailable: '2026-07-12' },
+    }));
+    const res = await server.tools['get_agent_traffic']!.handler({ projectId: 'p1', range: '7d' });
+    expect(res.content[0].text).toContain('Window: 2026-08-04 through 2026-08-10 inclusive (UTC)');
+    expect((res.structuredContent as { window: { range: string } }).window.range).toBe('7d');
+  });
 });
 
 describe('get_agent_legibility', () => {

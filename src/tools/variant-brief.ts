@@ -102,11 +102,21 @@ const BEST_PRACTICE_PRIORS: Record<string, string[]> = {
     'Make the CTA specific and benefit-led.',
     'Add a single strong proof point; remove competing distractions.',
   ],
-  marketplace: [
-    'Reduce choice overload: guide the visitor to a clear next step.',
-    'Surface trust and liquidity signals (ratings, counts, recency).',
-    'Make the primary action on each listing obvious.',
-    'Reassure on safety/guarantees near the point of decision.',
+  // Keys must be the project context types the API accepts (projects.ts
+  // VALID_CONTEXT_TYPES: saas | ecommerce | marketing | landing | internal).
+  // A `marketplace` key sat here that no project could ever have, while
+  // marketing and internal projects silently fell through to the generic list.
+  marketing: [
+    'Make the page answer "what is this and why should I care" in the first screen.',
+    'Give each section one job and one next step; cut competing CTAs.',
+    'Put the strongest proof (named customers, a hard number) near the primary CTA.',
+    'Match the copy to where the visitor came from (campaign, search intent).',
+  ],
+  internal: [
+    'Optimize for task completion, not persuasion: make the next step obvious.',
+    'Reduce steps and fields; prefill what the system already knows.',
+    'Use plain, specific labels over marketing copy.',
+    'Make errors and empty states say exactly what to do next.',
   ],
 };
 
@@ -151,10 +161,16 @@ function guidanceFor(dataState: DataState, contextType: string, arms: ArmReading
     }
     case 'directional': {
       const inconclusive = arms.some((a) => a.state === 'inconclusive');
+      const likelyWorse = arms.filter((a) => !a.isBaseline && a.state === 'likely_worse').map((a) => untrusted(a.variantId));
       return (
-        'No comparison on this component is decided. Early and moderate signals are hypotheses, not results (moderate evidence is wrong about one time in five), so do not target an arm as "under-" or "out-performing". ' +
+        'No comparison on this component is decided. Early, moderate and likely-worse signals are hypotheses, not results (each is wrong about one time in five), so do not target an arm as "under-" or "out-performing". ' +
+        (likelyWorse.length
+          ? `Probably behind the baseline (not decided): ${likelyWorse.join(', ')} — do not build on ${likelyWorse.length === 1 ? 'it' : 'them'}. `
+          : '') +
+        // "did not separate" is not "do not differ": the old wording asserted
+        // an equality the evidence never measured.
         (inconclusive
-          ? 'At least one arm ran a full period without separating from the baseline — the existing versions do not differ meaningfully, so make a clearly different change rather than a tweak. '
+          ? 'At least one arm ran a full period without separating from the baseline — any difference between the existing versions is too small to detect, so make a clearly different change rather than a tweak. '
           : '') +
         'Lean on the best-practice priors below and make one focused change.'
       );

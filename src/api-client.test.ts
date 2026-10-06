@@ -99,4 +99,27 @@ describe('ApiClient', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });
+
+  // Audit M10: with both fields present only body.error survived, so the
+  // server's explanation never reached the agent.
+  it('keeps body.message as detail beside the code', async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: async () => ({ error: 'variant_promoted', message: 'Unpromote this variant before hiding it.' }),
+    });
+    await expect(client.post('/projects/p/variants/retire', {})).rejects.toMatchObject({
+      status: 409,
+      message: 'variant_promoted',
+      detail: 'Unpromote this variant before hiding it.',
+    });
+  });
+
+  it('sends PATCH and DELETE with a JSON body', async () => {
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ ok: true }) });
+    await client.patch('/projects/abc/variants', { componentId: 'hero' });
+    await client.delete('/projects/abc/variants', { componentId: 'hero' });
+    expect(mockFetch.mock.calls[0]![1]).toMatchObject({ method: 'PATCH', body: JSON.stringify({ componentId: 'hero' }) });
+    expect(mockFetch.mock.calls[1]![1]).toMatchObject({ method: 'DELETE', body: JSON.stringify({ componentId: 'hero' }) });
+  });
 });
