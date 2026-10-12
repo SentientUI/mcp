@@ -43,6 +43,7 @@ export const TOOL_CATALOG: readonly ToolCatalogEntry[] = [
   { name: 'list_guardrail_events', access: 'read', summary: 'Every variant currently paused by a guardrail (optionally only pauses from the last N days)' },
   // Audience and layout
   { name: 'get_persona_breakdown', access: 'read', summary: 'Visitor clusters with session counts and reliability (all retained sessions)' },
+  { name: 'get_stage_breakdown', access: 'read', summary: 'E-commerce funnel stages: stage mix, arrival channel x stage, stage moves between visits, tested holdout lift per first-visit context and channel, and versions per context (windowed, observational)' },
   { name: 'get_layout_stats', access: 'read', summary: 'Per-persona section order with bandit pulls and reward (cumulative state)' },
   // Insights
   { name: 'get_insights', access: 'read', summary: 'Ranked measured findings with their sample, plus AI narrations marked unmeasured' },

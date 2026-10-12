@@ -56,6 +56,7 @@ Every write tool changes what real visitors see or what the project accepts — 
 | `get_funnel_report` | read | Step-by-step funnel drop-off |
 | `list_guardrail_events` | read | Every variant still paused by a guardrail; `days` narrows to recent pauses |
 | `get_persona_breakdown` | read | Cluster distribution + avg reliability per cluster (all retained sessions, not windowed) |
+| `get_stage_breakdown` | read | E-commerce funnel stages: stage mix (observed vs hinted), arrival channel x stage, stage moves between visits, tested holdout lift per first-visit context and channel (the headline lift's always-valid test, all-time, alpha split over 23 series), versions per context with evidence (windowed, observational) |
 | `get_layout_stats` | read | Per-persona layout order + bandit pulls/reward (cumulative state, not windowed) |
 | `get_insights` | read | Ranked measured findings (tier + sample, low-sample flagged; `limit`, default 10) + (Growth) AI narrations, which are unmeasured |
 | `refresh_insights` | write | Async trigger — wait ~15s then call `get_insights`. Starter+ and an editor/admin role |

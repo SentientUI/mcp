@@ -18,7 +18,7 @@ Discovery (`initialize`, `tools/list`) is public; tool calls require auth.
 ## What the tools do
 
 <!-- mcp-tools:start -->
-**Read:** `list_projects`, `get_project_stats`, `list_components`, `get_variant_performance` (rates with n + evidence verdict), `get_variant_brief`, `get_test_brief`, `get_goal_funnel`, `list_goals`, `list_funnels`, `get_funnel_report`, `list_guardrail_events`, `get_persona_breakdown`, `get_layout_stats`, `get_insights`, `get_cell_matrix`, `get_cell_detail`, `list_cell_reviews`, `get_agent_traffic`, `get_agent_legibility`, `get_integration_guide`. Every tool declares an `outputSchema` and returns `structuredContent`, so responses are type-checkable.
+**Read:** `list_projects`, `get_project_stats`, `list_components`, `get_variant_performance` (rates with n + evidence verdict), `get_variant_brief`, `get_test_brief`, `get_goal_funnel`, `list_goals`, `list_funnels`, `get_funnel_report`, `list_guardrail_events`, `get_persona_breakdown`, `get_stage_breakdown`, `get_layout_stats`, `get_insights`, `get_cell_matrix`, `get_cell_detail`, `list_cell_reviews`, `get_agent_traffic`, `get_agent_legibility`, `get_integration_guide`. Every tool declares an `outputSchema` and returns `structuredContent`, so responses are type-checkable.
 
 **Act** (confirm each with the user — they change what real visitors see): `create_project`, `add_origin`, `define_goal` (create-only: never overwrites a goal or changes the primary), `create_variant` (no-code managed text draft), `update_variant` (edit, or `status: active` to serve a draft), `delete_variant_draft`, `pause_variant` / `resume_variant`, `retire_variant` / `restore_variant`, `refresh_insights`, `generate_cell`, `review_cell`.
 <!-- mcp-tools:end -->

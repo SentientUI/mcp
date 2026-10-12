@@ -14,7 +14,7 @@ MCP server for [SentientUI](https://sentient-ui.com) — gives AI agents in Clau
 
 **1. Get a server key**
 
-Dashboard → Project → **Settings → API key → Server key** → Generate. Available on every plan, including Free. A server key belongs to **one project**: it can read and change only that project, and generating a new one revokes the previous key.
+Dashboard → Project → **Settings → API key → Server key** → Generate, and copy it right away — it is shown only once. Available on every plan, including Free. A server key belongs to **one project**: it can read and change only that project, and generating a new one revokes the previous key (except keys held by a connected Shopify store).
 
 **2. Add to your AI assistant**
 
@@ -107,6 +107,7 @@ A demo token is provisioned automatically — 10 calls/month, read-only (write t
 | `get_funnel_report` | read | Step-by-step funnel drop-off |
 | `list_guardrail_events` | read | Every variant currently paused by a guardrail (pass `days` to see only pauses from the last N days) |
 | `get_persona_breakdown` | read | Visitor clusters with session counts and reliability (all retained sessions) |
+| `get_stage_breakdown` | read | E-commerce funnel stages: stage mix, arrival channel x stage, stage moves between visits, tested holdout lift per first-visit context and channel (all-time), and versions per context (windowed, observational) |
 | `get_layout_stats` | read | Per-persona section order with bandit pulls and reward (cumulative state) |
 | `get_insights` | read | Ranked measured findings with their sample (low samples flagged), plus AI narrations marked unmeasured |
 | `refresh_insights` | write | Regenerate AI insights — needs Starter or higher and an editor/admin role (a paid model call); advisor recommendations are Growth+ |
@@ -149,7 +150,7 @@ A demo token is provisioned automatically — 10 calls/month, read-only (write t
 
 The server key you provide is passed as a `Bearer` token on every call to the SentientUI management API. It is scoped to **one project**: `list_projects` returns only that project, and calls naming any other project are refused. To work across several projects, connect by URL with an OAuth sign-in instead. Keys are never logged or stored by the MCP package; they exist only in the process environment.
 
-Server keys start with `sk_` (not `pk_`). Public keys (`pk_`) are for the React SDK only and will be rejected by the management API.
+Server keys start with `sk_` (not `pk_`). Public keys (`pk_`) are for the browser SDKs (React, core, the script-tag snippet) and will be rejected by the management API.
 
 ## AI agent context
 
@@ -157,7 +158,7 @@ Server keys start with `sk_` (not `pk_`). Public keys (`pk_`) are for the React 
 
 | Assistant | How to use |
 |-----------|-----------|
-| **Claude Code** | Copy to `~/.claude/skills/sentientui/SKILL.md` |
+| **Claude Code** | Append to your project's `CLAUDE.md` (or `~/.claude/CLAUDE.md` for every project) |
 | **Cursor** | Copy to `.cursor/rules/sentientui.mdc` |
 | **GitHub Copilot** | Append to `.github/copilot-instructions.md` |
 | **Other** | Paste into your assistant's system prompt |

@@ -114,7 +114,8 @@ and then, in the same tag after the ';', runs the inline pre-paint script; then 
 loader. The pre-paint script reads window.sentient when it runs, so sharing the tag is safe. It
 is optional but recommended — the loader is deferred, so on a return visit the page can paint
 its original state before the loader runs; the inline script applies the last served decision
-from the visitor's own device first, with no network call and no cloak. Get the exact bytes from
+from the visitor's own device first, with no network call and no page-wide cloak (it briefly hides
+only published components, and only for a visitor who just clicked an ad or email). Get the exact bytes from
 the dashboard's Install page, or from renderSnippetInstall({ config }) in
 '@sentientui/snippet/install' (renderSnippetPrePaintScript() for the script alone).
 
