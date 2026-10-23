@@ -8,7 +8,7 @@ export function registerVariantWriteTools(server: McpServer, client: ApiClient):
     'create_variant',
     {
       title: 'Create managed variant',
-      description: 'Create a NO-CODE managed text variant for a component (content stored in SentientUI, rendered by <AdaptiveText>). Use this ONLY for text-only variants the user wants without a code change. For variants that will live in the codebase (full components — copy, markup, styling), use get_variant_brief and write the variant in code instead; those auto-register on deploy and do not need create_variant. Works on every plan with an editor/admin login or the project\'s sk_ server key (anonymous demo tokens are read-only). The variant is created as a DRAFT — it serves no traffic until activated with update_variant (status \'active\'). Confirm the text with the user before calling.',
+      description: 'Create a NO-CODE managed text variant for a component (content stored in SentientUI, rendered by <AdaptiveText>). Use this ONLY for text-only variants the user wants without a code change. For variants that will live in the codebase (full components — copy, markup, styling), use get_variant_brief and write the variant in code instead; those auto-register on deploy and do not need create_variant. Works on every plan with an editor/admin login or the project\'s sk_ server key (anonymous demo tokens are read-only). The variant is created as a DRAFT — it serves no traffic until activated with update_variant (status \'active\'). Confirm the text with the user before calling. On a component that has moved to the shared track, the text is added to the component\'s versions instead (still a draft until activated), and text is required there (an empty create is refused); the call and its result are otherwise the same.',
       inputSchema: {
         projectId: projectIdSchema,
         componentId: z.string().min(1).max(200).describe('The component ID to add a variant to'),
@@ -146,7 +146,8 @@ export function registerVariantWriteTools(server: McpServer, client: ApiClient):
         'Edit a NO-CODE managed variant (one created with create_variant or in the dashboard): its display name, its text, ' +
         "or its status — 'active' starts serving it to visitors, 'draft' takes it back out of rotation. Code-native " +
         'variants cannot be edited here (change the code). Overwriting text or activating changes what live visitors see, ' +
-        'so CONFIRM with the user first. Omit a field to leave it unchanged.',
+        'so CONFIRM with the user first. Omit a field to leave it unchanged. On a component that has moved to the shared track ' +
+        "(one experiment with its versions), the text is edited on that component's version instead; the call and its result are the same.",
       inputSchema: {
         projectId: projectIdSchema,
         componentId: z.string().min(1).max(200).describe('The component ID'),
