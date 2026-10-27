@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { ApiError, type ApiClient } from '../api-client.js';
 
 /** Shared input schema for the project UUID, used by every project-scoped tool. */

@@ -1,6 +1,6 @@
 {
   "name": "@sentientui/mcp",
-  "version": "0.24.1",
+  "version": "0.24.2",
   "description": "MCP server for SentientUI — exposes project data and actions to AI agents",
   "license": "MIT",
   "homepage": "https://sentient-ui.com",
@@ -57,7 +57,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
-    "zod": "^3.23.8"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

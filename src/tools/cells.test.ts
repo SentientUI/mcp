@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { ApiClient } from '../api-client.js';
 import { registerCellTools } from './cells.js';
 import type { ToolHandler } from './test-utils.js';

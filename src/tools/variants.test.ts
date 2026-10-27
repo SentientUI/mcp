@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import type { ToolHandler } from './test-utils.js';
 import { ApiClient, ApiError } from '../api-client.js';
 import { registerVariantWriteTools } from './variants.js';
