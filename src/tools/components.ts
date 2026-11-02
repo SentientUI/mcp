@@ -31,6 +31,7 @@ import {
 
 type PerfComponentRow = {
   component_id: string;
+  total_unconfirmed_conversions?: number;
   /** The baseline the server measured evidence against (absent on older APIs). */
   control_id?: string | null;
   baseline_explicit?: boolean;
@@ -39,6 +40,7 @@ type PerfComponentRow = {
     impressions?: number;
     exposed_sessions?: number;
     conversions?: number;
+    unconfirmed_conversions?: number;
     evidence_state?: unknown;
     evidence_stats?: unknown;
     /** Windowed session-CVR verdict vs the baseline (absent on older APIs; null on the baseline). */
@@ -60,7 +62,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
       title: 'List components',
       description:
         'List all adaptive components in a project with variant counts and impression totals. ' +
-        'Counts cover all retained data by default; pass range or from/to for a window.' + UNTRUSTED_FIELDS_NOTE,
+        'Counts cover all retained data by default; pass range or from/to for a window. Impressions and conversions are People\'s; unconfirmedConversions is the API\'s count from visitors we couldn\'t confirm as people (not included in conversions).' + UNTRUSTED_FIELDS_NOTE,
       inputSchema: { projectId: projectIdSchema, ...rangeInputSchema('all') },
       outputSchema: {
         components: z
@@ -70,6 +72,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
               variantCount: z.number(),
               impressions: z.number(),
               conversions: z.number(),
+              unconfirmedConversions: z.number().nullable().describe("Conversions from visitors we couldn't confirm as people (not in conversions); null on an older API"),
             }),
           )
           .describe('Adaptive components in the project (empty if none)'),
@@ -92,6 +95,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
         component_id: string;
         total_impressions: number;
         total_conversions: number;
+        total_unconfirmed_conversions?: number;
         variants: Array<{ variant_id: string }>;
       }>(client, projectId, { rangeArgs: { range, from, to } });
 
@@ -101,6 +105,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
           variantCount: c.variants.length,
           impressions: c.total_impressions,
           conversions: c.total_conversions,
+          unconfirmedConversions: c.total_unconfirmed_conversions ?? null,
         })),
         total,
         truncated,
@@ -117,7 +122,8 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
       // Component ids come from the page (and from the public ingest path), so
       // they are visitor-mintable strings — delimit them (see untrusted()).
       const lines = components.map((c) =>
-        `- ${untrusted(c.component_id)}: ${c.variants.length} variants, ${c.total_impressions} impressions, ${c.total_conversions} conversions`
+        `- ${untrusted(c.component_id)}: ${c.variants.length} variants, ${c.total_impressions} impressions, ${c.total_conversions} conversions` +
+        (c.total_unconfirmed_conversions ? ` (+${c.total_unconfirmed_conversions} conversions from visitors we couldn't confirm as people)` : '')
       );
       if (truncated) {
         lines.push(`Showing ${components.length} of ${total} components — fetch cap reached; the rest exist but are not listed here.`);
@@ -132,13 +138,13 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
     {
       title: 'Variant performance',
       description:
-        'Per-variant conversion over the selected window (default: last 7 calendar days), keyed by ' +
+        'Per-variant conversion over the selected window (default: last 7 calendar days), as conversion rate among People (exposed and converting sessions are People\'s; conversions from visitors we couldn\'t confirm as people are reported beside them as unconfirmedConversions, never in the rate), keyed by ' +
         'component AND variant, each rate with its sample (converting sessions / exposed sessions). ' +
         'Each non-baseline variant carries the server\'s evidence verdict against its component\'s ' +
         'baseline arm (100-visit floor on both arms, multiple-comparison-corrected bars): `verdict` judges the ' +
         'windowed rate this row prints when the server sends window evidence (`verdictBasis` = window), and ' +
         'falls back to the all-time verdict on older APIs (`verdictBasis` = all_time). The all-time verdict is ' +
-        'also reported separately as reliability (`evidenceState`, `reliabilityVerdict`). ' +
+        'also reported separately as reliability (`evidenceState`, `reliabilityVerdict`) — that all-time reliability is the optimizer\'s own evidence, not a People-only figure. ' +
         'Only ahead/behind is a comparative result; raw rates are not a ranking. ' +
         'The change vs the preceding window is an untested descriptor.' + UNTRUSTED_FIELDS_NOTE,
       inputSchema: { projectId: projectIdSchema, ...rangeInputSchema('7d') },
@@ -154,7 +160,8 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
                 .boolean()
                 .describe("False when no arm is named 'control' and the baseline is just the alphabetically-first id"),
               sessions: z.number().describe('Exposed sessions in the window (the n of currentCvr)'),
-              conversions: z.number().describe('Converting sessions in the window'),
+              conversions: z.number().describe('Converting People (sessions) in the window'),
+              unconfirmedConversions: z.number().nullable().describe("Converting sessions from visitors we couldn't confirm as people (the API's own remainder; not in conversions or currentCvr); null on an older API"),
               currentCvr: z.number().nullable().describe('conversions / sessions over the window (0-1); null at 0 sessions'),
               lowSample: z.boolean().describe(`True under ${MIN_EVIDENCE_SAMPLE} sessions — the rate is not interpretable on its own`),
               evidenceState: z
@@ -227,7 +234,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
 
       type Row = {
         componentId: string; variantId: string; isBaseline: boolean; baselineExplicit: boolean;
-        sessions: number; conversions: number; currentCvr: number | null; lowSample: boolean;
+        sessions: number; conversions: number; unconfirmedConversions: number | null; currentCvr: number | null; lowSample: boolean;
         evidenceState: string | null; probBeatsBaseline: number | null; reliabilityVerdict: Verdict;
         windowEvidenceState: string | null; windowProbBeatsBaseline: number | null;
         verdict: Verdict; verdictBasis: 'window' | 'all_time';
@@ -301,6 +308,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
             baselineExplicit: baseline?.explicit ?? false,
             sessions: n,
             conversions: conv,
+            unconfirmedConversions: v.unconfirmed_conversions ?? null,
             currentCvr: n > 0 ? conv / n : null,
             lowSample: isLowSample(n),
             evidenceState: state,
@@ -345,6 +353,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
                 `${momentum ? `, ${momentum}` : ''} (untested)`,
             );
           }
+          if (v.unconfirmed_conversions) parts.push(`${v.unconfirmed_conversions} conversions from visitors we couldn't confirm as people`);
           block.push(parts.join(' · '));
         }
         textBlocks.push(block.join('\n'));
@@ -362,7 +371,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
 
       const header = [
         windowLine(window),
-        `Rates: converting ${sessionUnit} ÷ exposed ${sessionUnit} in the window. ` +
+        `Rates: conversion rate among People — converting ${sessionUnit} ÷ exposed ${sessionUnit} in the window. ` +
           (anyAllTimeBasis
             ? "Evidence: the server's ALL-TIME comparison of each arm against its component's baseline (this API sends no windowed verdict) — "
             : "Evidence (this window): the server's comparison of each arm's windowed rate against its component's baseline; " +

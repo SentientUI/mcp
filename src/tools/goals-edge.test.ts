@@ -77,7 +77,7 @@ describe('get_goal_funnel — formatting and nested variants', () => {
     });
     // flatMap appends '' after each goal; output is .trim()'d so no trailing newline.
     expect(text.endsWith('\n')).toBe(false);
-    expect(text).toBe('`lead`: 1 hits, 1 unique sessions, 50.0% conversion');
+    expect(text).toBe('`lead`: 1 hits, 1 unique sessions, 50.0% conversion rate among People');
   });
 
   it('shows empty-state message when no goals configured', async () => {

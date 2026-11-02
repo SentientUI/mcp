@@ -8,11 +8,12 @@ project has its own persona vocabulary (dashboard -> Settings -> Personas), and 
 EMPTY: every visitor is 'unknown' until a persona exists, and the optimizer learns across all
 traffic pooled in the meantime. Personas are DISCOVERED from behavior — or, far faster,
 DECLARED by the app when it already knows the visitor's role: init({ persona: 'admin' }) /
-<AdaptiveProvider persona=...> / window.sentient.persona. Declared beats inferred and serves
+<AdaptiveProvider persona=...> / window.sentient.persona. Declared beats discovered and serves
 at full confidence; unrecognized values are ignored server-side and surfaced in the dashboard
 so the operator can add them. Keep persona a low-cardinality role slug — never a user id.
-Decisions are locked per session: a first visit sees the original, the return visit adapts. Integrate one rung at a
-time.
+Decisions are locked per visit: a first visit usually sees the original and the return visit adapts — the
+exception is a visitor arriving on a campaign link, whose first page can already show the campaign's version
+(see Campaigns). Integrate one rung at a time.
 
 ## Setup (60 seconds, no account)
 
@@ -36,10 +37,13 @@ time.
 
 ## Rung 1 — Style (CSS only)
 
-Persona attributes on <html> (zero declaration; the attribute carries the project's own
-vocabulary keys — declared or inferred):
+Persona attributes on <html> (zero declaration). The attribute carries the key the visit is
+SERVED as: a declared key as-is ('admin'), a discovered group with its d- prefix
+('d-content'), a campaign ('c-spring') or retargeting group ('r-spring'), or 'unknown'. CSS for a discovered group must target the d- key — a rule
+written against a bare 'content' stops matching once the group carries its prefix:
 
     html[data-sentient-persona='admin'] .admin-tools { display: block; }
+    html[data-sentient-persona='d-content'] .reading-list { display: block; }
     html[data-sentient-confidence='low'] .admin-tools { display: none; }
 
 Learned style tokens (element-scoped, SSR-safe):
@@ -128,6 +132,44 @@ keep working.
 Consent: add consentFrom (same presets as above) to window.sentient when the site has a cookie
 banner, or consent: false plus SentientSnippet.grantConsent() on accept. On Shopify, snippet 0.32
 and later follows Shopify's Customer Privacy API automatically.
+
+## Campaigns — ad and email links
+
+A campaign is named in the dashboard (Settings -> Campaigns -> Prepare a campaign): its name, the
+utm_campaign its links carry (optionally utm_source / utm_medium, or the ad platform), what the ad
+promises, any discount code, and its landing page. Visitors arriving on its links are served as the
+campaign — persona 'c-spring' for a campaign named "Spring" — with versions written for it, from the
+FIRST page of the visit; a visitor who comes back without a tagged link within 30 days is still the
+campaign's until it ends. A visitor the site already knows (a declared persona or a discovered group)
+keeps that audience; the click still counts on the campaign card, as "already known". After a
+campaign, its visitors who did not convert can be moved into a retargeting group ('r-spring') with
+its own versions and its own result.
+
+What the integration must do is get the landing URL to the first decision:
+
+- Tag every ad and email link: ?utm_campaign=spring&utm_source=newsletter&utm_medium=email.
+  utm_campaign is required — it is what a campaign matches on; an untagged link is served like any
+  other visit.
+- Snippet, Shopify theme embed, AdaptiveProvider, and AdaptiveRoot in app/layout.tsx with no server
+  preload: nothing to add. The browser's first decision carries the page URL.
+- Next.js server preload (ANY of registrySlotIds, registrySlots, components, sections or slots on
+  AdaptiveRoot): the server decides before the browser runs, and a Server Component cannot read
+  the request URL. Next.js never passes searchParams to a layout, so preload in app/layout.tsx decides a campaign visitor's
+  first page as everyone else's (the campaign starts on their next visit, and that first click is not
+  on the campaign card). Where a page renders AdaptiveRoot itself, pass the page's own:
+
+      export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+        return (
+          <AdaptiveRoot apiKey={process.env.NEXT_PUBLIC_SENTIENT_API_KEY ?? ''}
+            searchParams={await searchParams} pathname="/spring">
+            …
+          </AdaptiveRoot>
+        );
+      }
+
+- Verify with a tagged link in a fresh browser profile: once the page has decided, <html
+  data-sentient-persona> reads the campaign's key ('c-spring'). The React SDK always sets it; the
+  snippet only with personaAttributes: true in window.sentient.
 
 ## Capture AI assistants (server-side, any framework)
 

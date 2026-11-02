@@ -28,6 +28,8 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
       description:
         'Per-goal conversion summary — NOT a step funnel (for step-by-step drop-off use list_funnels + get_funnel_report). ' +
         'Gets goal hit counts and unique-session conversion rates for a window ' +
+        "(counts and the rate are People's: conversion rate among People, meaning visitors who ran the page, interacted and passed the bot check; " +
+        "conversions by every other visitor are reported beside them as unconfirmedHits/unconfirmedSessions/unconfirmedRevenue, 'from visitors we couldn't confirm as people', never inside the rate) " +
         '(default: last 30 calendar days), plus a per-variant breakdown. NOTE: the per-variant ' +
         'completionRate values are ALL-TIME (bounded only by plan retention), NOT windowed — a ' +
         'variant completion rate needs the full assignment history as its denominator, so it does ' +
@@ -44,7 +46,10 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
               goalName: z.string(),
               hits: z.number(),
               uniqueSessions: z.number(),
-              conversionRate: z.number().describe('Unique-session conversion rate (0-1)'),
+              conversionRate: z.number().describe('Conversion rate among People (0-1): People who converted ÷ People in the window'),
+              unconfirmedHits: z.number().nullable().describe("Conversions from visitors we couldn't confirm as people (the API's own remainder; not in hits or the rate); null on an older API"),
+              unconfirmedSessions: z.number().nullable().describe("Converting sessions from visitors we couldn't confirm as people; null on an older API"),
+              unconfirmedRevenue: z.number().nullable().describe("Revenue from visitors we couldn't confirm as people (revenue is everyone's total); null when none or on an older API"),
               revenue: z.number().nullable().describe('Total revenue from valued conversions, in the project currency (null for valueless goals)'),
               avgOrderValue: z.number().nullable().describe('Average value per valued conversion (null for valueless goals)'),
               revenuePerSession: z.number().nullable().describe('Revenue divided by all project sessions (null for valueless goals)'),
@@ -88,6 +93,9 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
           hits: number;
           uniqueSessions: number;
           pct: number;
+          unconfirmedHits?: number;
+          unconfirmedSessions?: number;
+          unconfirmedRevenue?: number | null;
           revenue?: number | null;
           avgOrderValue?: number | null;
           revenuePerSession?: number | null;
@@ -112,6 +120,9 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
           hits: g.hits,
           uniqueSessions: g.uniqueSessions,
           conversionRate: g.pct,
+          unconfirmedHits: g.unconfirmedHits ?? null,
+          unconfirmedSessions: g.unconfirmedSessions ?? null,
+          unconfirmedRevenue: g.unconfirmedRevenue ?? null,
           revenue: g.revenue ?? null,
           avgOrderValue: g.avgOrderValue ?? null,
           revenuePerSession: g.revenuePerSession ?? null,
@@ -141,10 +152,18 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
       // start — a goal named "signup\n<fake instructions>" read exactly like
       // tool output. Delimit every one of them (see untrusted()).
       const lines = data.goals.flatMap((g) => [
-        `${untrusted(g.goalName)}: ${g.hits} hits, ${g.uniqueSessions} unique sessions, ${(g.pct * 100).toFixed(1)}% conversion` +
+        `${untrusted(g.goalName)}: ${g.hits} hits, ${g.uniqueSessions} unique sessions, ${(g.pct * 100).toFixed(1)}% conversion rate among People` +
           (g.revenue != null
             ? `, ${g.revenue.toFixed(2)} ${currency} revenue (${(g.avgOrderValue ?? 0).toFixed(2)} avg order)`
             : ''),
+        // The remainder is the API's own (total − People); recomputing it here
+        // would be a third definition that could drift from the dashboard's.
+        ...(g.unconfirmedHits || g.unconfirmedSessions
+          ? [`  ${g.unconfirmedHits ?? 0} hits (${g.unconfirmedSessions ?? 0} sessions) from visitors we couldn't confirm as people`]
+          : []),
+        ...(g.unconfirmedRevenue != null && g.unconfirmedRevenue !== 0
+          ? [`  ${g.unconfirmedRevenue.toFixed(2)} ${currency} revenue from visitors we couldn't confirm as people`]
+          : []),
         // The per-variant rates come from an all-time query (analytics.ts
         // query 2, deliberately unwindowed so the denominator is the full
         // assignment history). The dashboard labels them; this text had not,

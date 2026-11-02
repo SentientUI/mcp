@@ -46,4 +46,28 @@ describe('get_integration_guide', () => {
     expect(section.indexOf('window.sentient')).toBeLessThan(section.indexOf('pre-paint script'));
     expect(section.indexOf('pre-paint script')).toBeLessThan(section.indexOf('deferred'));
   });
+
+  it('teaches campaigns: tagged links, the first page, and searchParams only where a page renders AdaptiveRoot', async () => {
+    const server = makeServer();
+    registerIntegrationGuideTools(server as any);
+    const result = await server.tools['get_integration_guide']!.handler({});
+    const text = result.content[0].text as string;
+    const section = text.slice(text.indexOf('## Campaigns'), text.indexOf('## Capture AI assistants'));
+    expect(section.length).toBeGreaterThan(0);
+    // utm_campaign is what a campaign matches on; untagged links cannot be one.
+    expect(section).toContain('utm_campaign');
+    expect(section).toMatch(/c-spring/);
+    expect(section).toMatch(/r-spring/);
+    // Next.js: the prop exists for pages; a layout never gets searchParams.
+    expect(section).toContain('searchParams={await searchParams}');
+    expect(section).toMatch(/never passes searchParams to a layout/);
+    // Every prop that makes AdaptiveRoot decide on the server freezes the visit
+    // before the URL is known — all of them named, not a subset.
+    for (const prop of ['registrySlotIds', 'registrySlots', 'components', 'sections', 'slots']) {
+      expect(section).toContain(prop);
+    }
+    // A campaign visitor's FIRST page adapts, so the opening line can no longer
+    // promise that every first visit sees the original.
+    expect(text).not.toMatch(/a first visit sees the original, the return visit adapts\./);
+  });
 });

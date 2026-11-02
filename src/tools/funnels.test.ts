@@ -39,12 +39,32 @@ describe('get_funnel_report', () => {
     const server = setup(REPORT);
     const res = await server.tools['get_funnel_report']!.handler({ projectId: 'p1', funnelId: 'checkout' });
     const text = res.content[0].text as string;
-    expect(text).toContain('`Added to cart`: 100 reached');
-    expect(text).toContain('`Purchase`: 20 reached (80% drop-off from previous)');
+    expect(text).toContain('`Added to cart`: 100 People reached');
+    expect(text).toContain('`Purchase`: 20 People reached (80% drop-off from previous)');
     expect(text).toContain('Revenue: 900.50 EUR');
     // 45.025 is 45.02499… in IEEE754, so toFixed(2) → 45.02.
     expect(text).toContain('45.02 EUR avg order');
     expect(res.structuredContent).toMatchObject({ funnelId: 'checkout', revenue: 900.5 });
+  });
+
+  // revenue is the API's total (everyone's orders, as get_goal_funnel
+  // states it), with the API's own remainder beside it. The tool passes both
+  // through untouched: subtracting or adding here would print a figure no
+  // dashboard shows.
+  it('states the revenue remainder from visitors we couldn\'t confirm as people, as the API sent it', async () => {
+    const server = setup({ ...REPORT, revenue: 1200, unconfirmedRevenue: 299.5 });
+    const res = await server.tools['get_funnel_report']!.handler({ projectId: 'p1', funnelId: 'checkout' });
+    const text = res.content[0].text as string;
+    expect(text).toContain("Revenue: 1200.00 EUR (299.50 EUR from visitors we couldn't confirm as people)");
+    expect(res.structuredContent).toMatchObject({ revenue: 1200, unconfirmedRevenue: 299.5 });
+  });
+
+  it('says nothing about a remainder when there is none, and reports null for an older API', async () => {
+    const server = setup(REPORT);
+    const res = await server.tools['get_funnel_report']!.handler({ projectId: 'p1', funnelId: 'checkout' });
+    const text = res.content[0].text as string;
+    expect(text).not.toContain("couldn't confirm as people)");
+    expect((res.structuredContent as { unconfirmedRevenue: number | null }).unconfirmedRevenue).toBeNull();
   });
 
   it('omits the revenue line for valueless funnels and flags never-fired steps', async () => {

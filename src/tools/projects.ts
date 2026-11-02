@@ -169,13 +169,19 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
     {
       title: 'Project health stats',
       description:
-        'Get ingestion health for a project: status, events and sessions in the last 24 hours, the time of the last event, ' +
+        'Get ingestion health for a project: status, events in the last 24 hours, the People count for the same window (visitors who ran the page, interacted and passed the bot check), ' +
+        'how many visitors are still being analysed, how many are automated, the time of the last event, ' +
         'and the all-time count of calls to the SentientUI agent API (/v1/agent) — NOT MCP tool calls.',
       inputSchema: { projectId: projectIdSchema },
       outputSchema: {
         status: z.string().describe('Overall project health status'),
         events24h: z.number().describe('Events in the last 24 hours'),
-        sessions24h: z.number().describe('Sessions in the last 24 hours'),
+        // This field used to be raw sessions; it now carries People, so the old
+        // description told an agent bots and unverified visitors were in it.
+        sessions24h: z.number().describe('Deprecated alias of people on a current API; the raw session count on an older one'),
+        people: z.number().nullable().describe('People in the last 24 hours: visitors who ran the page, interacted and passed the bot check; null when the API predates the traffic classification'),
+        beingAnalysed: z.number().nullable().describe('Visitors still being analysed — usually settled within 3 hours; null on an older API'),
+        automated: z.number().nullable().describe('Automated visitors: AI assistants, search & AI crawlers and other automated; null on an older API'),
         // Was "Total agent (MCP/API) calls" — but the count comes from
         // agent_events, which only the /v1/agent endpoint writes. MCP tool calls
         // are never in it, so an agent read its own activity as missing.
@@ -194,14 +200,28 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
         status: string;
         events24h: number;
         sessions24h: number;
+        people?: number;
+        traffic?: { people?: number; beingAnalysed?: number; automated?: number };
         agentCalls: number;
         lastEventAt: string | null;
       }>(`/projects/${id}/health`);
 
+      // An API from before the traffic classification sends only sessions24h,
+      // which is raw sessions there. Printing it as People, or filling the other
+      // two with zeros, would claim a classification that never happened — so
+      // keep the old label and report the new fields as unknown (null).
+      const peopleCount = stats.people ?? stats.traffic?.people;
+      const classified = peopleCount !== undefined;
+      const people = classified ? peopleCount : null;
+      const beingAnalysed = classified ? (stats.traffic?.beingAnalysed ?? 0) : null;
+      const automated = classified ? (stats.traffic?.automated ?? 0) : null;
+
       const text = [
         `Status: ${stats.status}`,
         `Events (24h): ${stats.events24h}`,
-        `Sessions (24h): ${stats.sessions24h}`,
+        ...(classified
+          ? [`People (24h): ${people}`, `Being analysed: ${beingAnalysed}`, `Automated: ${automated}`]
+          : [`Sessions (24h): ${stats.sessions24h}`]),
         `Agent API calls (/v1/agent, all-time): ${stats.agentCalls}`,
         `Last event: ${stats.lastEventAt ?? 'never'}`,
       ].join('\n');
@@ -211,7 +231,10 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
         structuredContent: {
           status: stats.status,
           events24h: stats.events24h,
-          sessions24h: stats.sessions24h,
+          sessions24h: people ?? stats.sessions24h,
+          people,
+          beingAnalysed,
+          automated,
           agentCalls: stats.agentCalls,
           lastEventAt: stats.lastEventAt,
         },

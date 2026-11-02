@@ -42,7 +42,7 @@ type EvidenceReport = {
  *  agent unable to tell "nothing happened" from "the job stopped running". */
 const EMPTY_REASON_TEXT: Record<string, string> = {
   no_events: 'The snippet has not fired yet — nothing has reached us.',
-  no_traffic_yet: 'Test traffic only so far; no genuine visitors yet.',
+  no_traffic_yet: "In the last 7 days we've only seen visitors we couldn't confirm as people. New visitors are usually confirmed within 3 hours, and this report fills in as they are.",
   awaiting_profiles: 'Still building visitor profiles before visitors can be grouped.',
   no_variants: 'Nothing to compare yet — no adaptive component is running.',
   nothing_moved: 'Enough data, and nothing moved this period. That is a result.',

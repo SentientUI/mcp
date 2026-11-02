@@ -87,7 +87,7 @@ A demo token is provisioned automatically — 10 calls/month, read-only (write t
 |------|--------|-------------|
 | `list_projects` | read | List the projects this credential can see (an `sk_` key sees only its own project) |
 | `create_project` | write | Create a project and return its `pk_` public key (account login only — not an `sk_` key or demo token) |
-| `get_project_stats` | read | Ingestion health: status, 24h events and sessions, and calls to the `/v1/agent` API (`agentCalls` — not MCP tool calls) |
+| `get_project_stats` | read | Ingestion health: status, 24h events and People (with how many are being analysed or automated), and calls to the `/v1/agent` API (`agentCalls` — not MCP tool calls) |
 | `add_origin` | write | Allow-list a site origin so the SDK's events from it are accepted (idempotent) |
 | `list_components` | read | Adaptive components with variant counts and impressions |
 | `get_variant_performance` | read | Per-(component, variant) rates with their n and the server's evidence verdict vs the baseline (range 7d/30d/90d/all or from/to; default 7d; the verdict judges the windowed rate, with all-time reliability reported separately) |
@@ -116,7 +116,8 @@ A demo token is provisioned automatically — 10 calls/month, read-only (write t
 | `generate_cell` | write | Queue AI generation for one cell — publishes automatically, or waits for approval when review mode is on (Free includes 5 generations/month) |
 | `list_cell_reviews` | read | Generated versions waiting for approval (review mode) |
 | `review_cell` | write | Approve (publish) or reject one generated version waiting for review |
-| `get_agent_traffic` | read | Which AI crawlers, agentic browsers and agent API callers read the site (windowed; paid plans) |
+| `get_agent_traffic` | read | Which AI crawlers, automated browser sessions and agent API callers read the site (windowed; paid plans) |
+| `get_traffic_breakdown` | read | Where traffic came from: People vs visitors we couldn't confirm vs automated (7 groups, windowed) |
 | `get_agent_legibility` | read | Whether the pages agents read are machine-legible, with fixes (paid plans) |
 | `get_integration_guide` | read | SDK setup guide (static — same for every project) |
 <!-- mcp-tools:end -->

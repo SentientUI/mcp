@@ -36,7 +36,7 @@ Every write tool changes what real visitors see or what the project accepts — 
 |------|--------|-------|
 | `list_projects` | read | Start here to get project IDs (an `sk_` key sees only its own project) |
 | `create_project` | write | Onboard a new user: creates a project + returns its `pk_` key. Needs an account login (OAuth) — refuses `sk_` project keys and demo tokens. Follow with `get_integration_guide` |
-| `get_project_stats` | read | Health status + 24h event/session volume. `agentCalls` counts calls to the `/v1/agent` API (all retained history) — not MCP tool calls |
+| `get_project_stats` | read | Health status + 24h events and People count. `agentCalls` counts calls to the `/v1/agent` API (all retained history) — not MCP tool calls |
 | `add_origin` | write | Allow-list a site origin so the SDK's events from it are accepted. Idempotent |
 | `list_components` | read | Components + variant counts + impression totals |
 | `get_variant_performance` | read | Per-(component, variant) rate with its n (converting / exposed sessions, range/from/to; default 7d), plus the server's evidence verdict on that windowed rate vs the component's baseline (`verdict`: ahead / behind / unclear; `verdictBasis` says window, or all_time on older APIs) and the all-time verdict as reliability (`evidenceState`, `reliabilityVerdict`). Only ahead/behind is a result; the preceding-window change is an untested descriptor |
@@ -65,7 +65,8 @@ Every write tool changes what real visitors see or what the project accepts — 
 | `generate_cell` | write | Queues async AI generation for one cell (also retries failed ones). Publishes automatically, or waits for `review_cell` when review mode is on. Free includes 5 generations/month |
 | `list_cell_reviews` | read | Generated versions waiting for approval |
 | `review_cell` | write | Approve (publishes to live traffic) or reject one waiting version |
-| `get_agent_traffic` | read | AI crawlers / agentic browsers / agent API callers reading the site (windowed; paid plans) |
+| `get_agent_traffic` | read | AI crawlers / automated browser sessions / agent API callers reading the site (windowed; paid plans) |
+| `get_traffic_breakdown` | read | Where traffic came from: People vs visitors we couldn't confirm vs automated (7 groups, windowed) |
 | `get_agent_legibility` | read | Whether agent-read pages are machine-legible, with fixes (paid plans) |
 | `get_integration_guide` | read | SDK setup guide (static) |
 <!-- mcp-tools:end -->

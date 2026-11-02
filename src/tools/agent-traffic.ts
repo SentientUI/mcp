@@ -45,7 +45,7 @@ export function registerAgentTrafficTools(server: McpServer, client: ApiClient):
     {
       title: 'Agent traffic',
       description:
-        'Which AI agents and crawlers are reading this site: totals by type (passive crawlers, agentic browsers, agent API calls), engine breakdown, and the paths they fetch most. Defaults to the last 30 calendar days; pass range (7d/30d/90d/all) or from/to (YYYY-MM-DD) like every other windowed tool (agent logs are retained 30 days on Free/Starter, 90 on Growth+). Agent traffic is tracked separately and never counted in conversion rate.' + UNTRUSTED_FIELDS_NOTE,
+        'Which AI agents and crawlers are reading this site: totals by type (passive crawlers, automated browser sessions, agent API calls), engine breakdown, and the paths they fetch most. Defaults to the last 30 calendar days; pass range (7d/30d/90d/all) or from/to (YYYY-MM-DD) like every other windowed tool (agent logs are retained 30 days on Free/Starter, 90 on Growth+). Automated traffic is reported separately: conversion rate is among People only (see get_traffic_breakdown).' + UNTRUSTED_FIELDS_NOTE,
       // This tool alone took ad-hoc ISO from/to with no range token and echoed
       // no window, while every other windowed tool used rangeInputSchema — so
       // agents passed range:'7d' here, it was silently dropped, and 30 days of
@@ -88,7 +88,7 @@ export function registerAgentTrafficTools(server: McpServer, client: ApiClient):
 
       const lines = [
         ...(win ? [win] : []),
-        `Agent traffic: ${s.totals.crawler} crawler fetches, ${s.totals.api} agent API calls, ${s.totals.browser} agentic browser sessions.`,
+        `Agent traffic: ${s.totals.crawler} crawler fetches, ${s.totals.api} agent API calls, ${s.totals.browser} automated browser sessions.`,
         `Live user fetches: ${s.intents.user} · Search index: ${s.intents.search} · Training: ${s.intents.training}${s.intents.other ? ` · Other: ${s.intents.other}` : ''} (a "live user fetch" = an AI assistant reading your site to answer a real person).`,
         '',
         'Engines:',

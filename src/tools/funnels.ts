@@ -113,7 +113,7 @@ export function registerFunnelTools(server: McpServer, client: ApiClient): void 
     {
       title: 'Funnel drop-off report',
       description:
-        'Per-step reach and drop-off for one funnel over its conversion window, with per-variant and audience splits per step, final-step revenue, and the holdout ("without optimization") comparison.' + UNTRUSTED_FIELDS_NOTE,
+        'Per-step reach and drop-off for one funnel over its conversion window (reach and drop-off are People: visitors who ran the page, interacted and passed the bot check; others who reached a step are in unconfirmedReached, from visitors we couldn\'t confirm as people, never inside a drop-off), with per-variant and audience splits per step, final-step revenue (the total, every visitor\'s orders, with unconfirmedRevenue beside it; avg order and per-entering-visitor are People\'s), and the holdout ("without optimization") comparison.' + UNTRUSTED_FIELDS_NOTE,
       inputSchema: { projectId: projectIdSchema, funnelId: funnelIdSchema },
       outputSchema: {
         funnelId: z.string(),
@@ -127,7 +127,8 @@ export function registerFunnelTools(server: McpServer, client: ApiClient): void 
               stepIndex: z.number(),
               goalId: z.string(),
               displayName: z.string(),
-              reached: z.number().describe('Distinct visitors reaching this step in-window'),
+              reached: z.number().describe('Distinct People reaching this step in-window'),
+              unconfirmedReached: z.number().nullable().describe("Visitors we couldn't confirm as people who reached this step (the API's own remainder; not in reached or any drop-off); null on an older API"),
               dropOffFromPrevious: z.number().nullable().describe('1 - reached/previousReached (null on the first step)'),
               neverFired: z.boolean().describe('True when the step goal has never been recorded anywhere — likely a typo'),
               variants: z.array(z.object({
@@ -139,9 +140,10 @@ export function registerFunnelTools(server: McpServer, client: ApiClient): void 
               personas: z.array(z.object({ label: z.string(), reached: z.number() })),
             }),
           ),
-        revenue: z.number().nullable().describe('Final-step revenue in the project currency (null when no valued conversions)'),
-        avgOrderValue: z.number().nullable(),
-        revenuePerEnteringVisitor: z.number().nullable(),
+        revenue: z.number().nullable().describe('Final-step revenue in the project currency: the total, every visitor\'s orders plus orders with no visit (null when no valued conversions)'),
+        unconfirmedRevenue: z.number().nullable().describe("The part of revenue from visitors we couldn't confirm as people (the API's own remainder); null when none or on an older API"),
+        avgOrderValue: z.number().nullable().describe("People's revenue per People order"),
+        revenuePerEnteringVisitor: z.number().nullable().describe("People's revenue per People entering the funnel"),
         holdoutCompletion: z.object({ entered: z.number(), reached: z.number() }).nullable()
           .describe('Holdout visitors entering vs finishing — the "without optimization" line'),
       },
@@ -155,12 +157,13 @@ export function registerFunnelTools(server: McpServer, client: ApiClient): void 
         strictOrder?: boolean;
         currency: string;
         steps: Array<{
-          stepIndex: number; goalId: string; displayName: string; reached: number;
+          stepIndex: number; goalId: string; displayName: string; reached: number; unconfirmedReached?: number;
           dropOffFromPrevious: number | null; neverFired: boolean;
           variants: Array<{ componentId: string; variantId: string; reached: number; assigned: number }>;
           personas: Array<{ label: string; reached: number }>;
         }>;
         revenue: number | null;
+        unconfirmedRevenue?: number | null;
         avgOrderValue: number | null;
         revenuePerEnteringVisitor: number | null;
         holdoutCompletion: { entered: number; reached: number } | null;
@@ -171,7 +174,8 @@ export function registerFunnelTools(server: McpServer, client: ApiClient): void 
       const lines: string[] = [`${untrusted(data.displayName)} — last ${data.windowDays} days`];
       for (const s of data.steps) {
         lines.push(
-          `${s.stepIndex + 1}. ${untrusted(s.displayName)}: ${s.reached} reached` +
+          `${s.stepIndex + 1}. ${untrusted(s.displayName)}: ${s.reached} People reached` +
+          (s.unconfirmedReached ? ` (${s.unconfirmedReached} more from visitors we couldn't confirm as people)` : '') +
           stepChangeText(s.dropOffFromPrevious) +
           (s.neverFired ? ' [never recorded — check the goal name]' : ''),
         );
@@ -182,6 +186,11 @@ export function registerFunnelTools(server: McpServer, client: ApiClient): void 
       if (data.revenue != null) {
         lines.push(
           `Revenue: ${data.revenue.toFixed(2)} ${data.currency}` +
+          // The API's remainder, verbatim: no arithmetic here, or this line
+          // would print a figure the dashboard does not.
+          (data.unconfirmedRevenue != null && data.unconfirmedRevenue !== 0
+            ? ` (${data.unconfirmedRevenue.toFixed(2)} ${data.currency} from visitors we couldn't confirm as people)`
+            : '') +
           (data.avgOrderValue != null ? ` (${data.avgOrderValue.toFixed(2)} ${data.currency} avg order)` : '') +
           (data.revenuePerEnteringVisitor != null ? `, ${data.revenuePerEnteringVisitor.toFixed(2)} ${data.currency} per entering visitor` : ''),
         );
@@ -192,7 +201,12 @@ export function registerFunnelTools(server: McpServer, client: ApiClient): void 
       return {
         content: [{ type: 'text' as const, text: lines.join('\n') }],
         // Tolerate an API deployed before strict funnels existed.
-        structuredContent: { ...data, strictOrder: data.strictOrder ?? true },
+        structuredContent: {
+          ...data,
+          strictOrder: data.strictOrder ?? true,
+          unconfirmedRevenue: data.unconfirmedRevenue ?? null,
+          steps: data.steps.map((s) => ({ ...s, unconfirmedReached: s.unconfirmedReached ?? null })),
+        },
       };
     }),
   );

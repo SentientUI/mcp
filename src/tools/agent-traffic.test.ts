@@ -130,3 +130,15 @@ describe('get_agent_legibility', () => {
     expect(text).not.toContain('No price found');
   });
 });
+
+describe('get_agent_traffic labels', () => {
+  it('calls browser sessions "automated browser sessions", matching the dashboard', async () => {
+    const server = setup(() => ({
+      totals: { crawler: 2, api: 1, browser: 3 }, engines: [], topPaths: [],
+      intents: { user: 0, search: 0, training: 0, other: 0 }, daily: [],
+    }));
+    const res = await server.tools['get_agent_traffic']!.handler({ projectId: 'p1' });
+    expect(res.content[0]!.text).toContain('3 automated browser sessions');
+    expect(res.content[0]!.text).not.toContain('agentic browser sessions');
+  });
+});

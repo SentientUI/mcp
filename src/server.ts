@@ -24,6 +24,7 @@ import { registerVariantBriefTools } from './tools/variant-brief.js';
 import { registerTestBriefTools } from './tools/test-brief.js';
 import { registerIntegrationGuideTools } from './tools/integration-guide.js';
 import { registerAgentTrafficTools } from './tools/agent-traffic.js';
+import { registerTrafficTools } from './tools/traffic.js';
 import { registerCellTools } from './tools/cells.js';
 import { registerUiResources, RESOURCE_MIME_TYPE } from './ui/index.js';
 
@@ -65,6 +66,7 @@ export function createMcpServer(client: ApiClient): McpServer {
   registerVariantWriteTools(server, client);
   registerIntegrationGuideTools(server);
   registerAgentTrafficTools(server, client);
+  registerTrafficTools(server, client);
   registerCellTools(server, client);
 
   return server;

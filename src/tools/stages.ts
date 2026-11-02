@@ -107,20 +107,21 @@ export function registerStageTools(server: McpServer, client: ApiClient): void {
       // description because nothing serves on stage yet: an agent must not
       // read a per-context arm result as "stage-based serving would win".
       description:
-        'E-commerce projects: where visitors are in buying (new, browsing, carted, customer, lapsed) — share of human ' +
-        'sessions per stage (each session counted once, at its latest recorded stage; hinted = set by a tagged campaign, ' +
+        'E-commerce projects: where visitors are in buying (new, browsing, carted, customer, lapsed) — share of People ' +
+        'per stage (each session counted once, at its latest recorded stage; hinted = set by a tagged campaign, ' +
         'not observed history), arrival channel x stage with conversion, how visitors moved between stages from one ' +
         'visit to the next, the TESTED holdout lift per first-visit context and per first-visit arrival channel (the ' +
         'same always-valid test as the headline lift, all-time, alpha split over all 23 possible series; "collecting" ' +
         'and "awaiting_conversions" are early, not results), and each region\'s versions per context judged against the ' +
         'original with the per-audience evidence rule. OBSERVATIONAL: nothing is served by stage yet; the per-context ' +
         'results are what stage-based serving would have to beat. Defaults to the last 30 days; pass range or from/to. ' +
+        'Counts and conversion rates are among People (visitors who ran the page, interacted and passed the bot check); the holdout lift test is the one exception: it runs on the optimizer\'s own population, so its visitor counts will not add up to the People figures beside it. ' +
         'Returns enabled:false when the project does not record stages.' + UNTRUSTED_FIELDS_NOTE,
       inputSchema: { projectId: projectIdSchema, ...rangeInputSchema('30d') },
       outputSchema: {
         enabled: z.boolean().describe('False when the project does not record funnel stages (settings.stage absent)'),
         mode: z.string().nullable().describe("'record' (reporting only) — serving by stage is not available yet"),
-        sessions: z.number().describe('Human sessions with a recorded stage in the window'),
+        sessions: z.number().describe('People with a recorded stage in the window'),
         hinted: z.number().describe('Of those, sessions whose stage came from a campaign tag, not observed history'),
         stages: z.array(z.object({ stage: z.string(), sessions: z.number(), share: z.number().describe('0-1'), observed: z.number(), hinted: z.number() })),
         channels: z.array(z.object({ channel: z.string(), sessions: z.number(), conversions: z.number(), conversionRate: z.number().nullable() })),

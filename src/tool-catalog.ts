@@ -55,7 +55,8 @@ export const TOOL_CATALOG: readonly ToolCatalogEntry[] = [
   { name: 'list_cell_reviews', access: 'read', summary: 'Generated versions waiting for approval (review mode)' },
   { name: 'review_cell', access: 'write', summary: 'Approve (publish) or reject one generated version waiting for review' },
   // Agent traffic
-  { name: 'get_agent_traffic', access: 'read', summary: 'Which AI crawlers, agentic browsers and agent API callers read the site (windowed)' },
+  { name: 'get_agent_traffic', access: 'read', summary: 'Which AI crawlers, automated browser sessions and agent API callers read the site (windowed)' },
+  { name: 'get_traffic_breakdown', access: 'read', summary: 'Where traffic came from: People vs visitors we could not confirm vs automated (7 groups, windowed)' },
   { name: 'get_agent_legibility', access: 'read', summary: 'Whether the pages agents read are machine-legible, with fixes' },
   // Setup
   { name: 'get_integration_guide', access: 'read', summary: 'SDK setup guide (static — same for every project)' },

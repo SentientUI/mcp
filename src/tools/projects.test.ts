@@ -169,3 +169,37 @@ describe('get_project_stats agentCalls wording', () => {
     expect(result.content[0].text).not.toMatch(/MCP/);
   });
 });
+
+describe('get_project_stats People wording', () => {
+  it('exposes people, beingAnalysed and automated and no longer calls sessions24h "sessions"', async () => {
+    const client = new ApiClient({ apiKey: 'sk_test' });
+    vi.spyOn(client, 'get').mockResolvedValue({
+      status: 'ok', events24h: 9, sessions24h: 4, people: 4, agentCalls: 0, lastEventAt: null,
+      traffic: { people: 4, beingAnalysed: 2, automated: 7 },
+    });
+    const server = makeServer();
+    registerProjectTools(server as any, client);
+    const result = await server.tools['get_project_stats']!.handler({ projectId: 'p1' });
+    expect(result.structuredContent).toMatchObject({ people: 4, beingAnalysed: 2, automated: 7 });
+    expect(result.content[0]!.text).toContain('People (24h): 4');
+    expect(result.content[0]!.text).toContain('Being analysed: 2');
+    expect(result.content[0]!.text).toContain('Automated: 7');
+    expect(result.content[0]!.text).not.toContain('Sessions (24h)');
+    const cfg = server.registerTool.mock.calls.find((c) => c[0] === 'get_project_stats')![1] as any;
+    expect(cfg.description).not.toContain('sessions in the last 24 hours');
+    expect(cfg.description).toContain('People');
+  });
+});
+
+describe('get_project_stats against an older API', () => {
+  it('keeps the Sessions label and returns null, not invented zeros, for the new fields', async () => {
+    const client = new ApiClient({ apiKey: 'sk_test' });
+    vi.spyOn(client, 'get').mockResolvedValue({ status: 'ok', events24h: 9, sessions24h: 4, agentCalls: 0, lastEventAt: null });
+    const server = makeServer();
+    registerProjectTools(server as any, client);
+    const result = await server.tools['get_project_stats']!.handler({ projectId: 'p1' });
+    expect(result.structuredContent).toMatchObject({ sessions24h: 4, people: null, beingAnalysed: null, automated: null });
+    expect(result.content[0]!.text).toContain('Sessions (24h): 4');
+    expect(result.content[0]!.text).not.toMatch(/People \(24h\)|Being analysed|Automated:/);
+  });
+});

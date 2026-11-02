@@ -367,3 +367,20 @@ describe('get_layout_stats', () => {
     expect(result.content[0].text).toContain('No layout data');
   });
 });
+
+describe('get_insights no_traffic_yet wording', () => {
+  it("says we only saw visitors we couldn't confirm as people, matching the dashboard", async () => {
+    const client = new ApiClient({ apiKey: 'sk_test' });
+    vi.spyOn(client, 'get').mockResolvedValue({
+      findings: [], reached: 'none', emptyReason: 'no_traffic_yet',
+      interpretation: { count: 0, locked: false, emptyReason: null },
+      generatedAt: '2026-08-25T10:00:00.000Z', freshness: { isStale: false },
+    });
+    const server = makeServer();
+    registerInsightTools(server as any, client);
+    const text = (await server.tools['get_insights']!.handler({ projectId: 'p1' })).content[0]!.text;
+    expect(text).toContain("In the last 7 days we've only seen visitors we couldn't confirm as people");
+    expect(text).toContain('usually confirmed within 3 hours');
+    expect(text).not.toMatch(/test traffic|genuine visitors|so far/i);
+  });
+});
