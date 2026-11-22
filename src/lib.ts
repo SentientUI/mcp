@@ -10,4 +10,11 @@ export { PUBLIC_UI_RESOURCE_URIS } from './ui/index.js';
 // The registered tool list with one-line summaries — the single source the doc
 // surfaces (README, AGENTS.md, docs/mcp-setup.md, llms.txt, the server card)
 // are parity-tested against, so they cannot drift from the registry again.
-export { TOOL_CATALOG, TOOL_NAMES, type ToolCatalogEntry, type ToolAccess } from './tool-catalog.js';
+export {
+  TOOL_CATALOG,
+  TOOL_NAMES,
+  APP_ONLY_TOOL_CATALOG,
+  APP_ONLY_TOOL_NAMES,
+  type ToolCatalogEntry,
+  type ToolAccess,
+} from './tool-catalog.js';

@@ -78,7 +78,53 @@ describe('get_funnel_report', () => {
     const res = await server.tools['get_funnel_report']!.handler({ projectId: 'p1', funnelId: 'checkout' });
     const text = res.content[0].text as string;
     expect(text).not.toContain('Revenue:');
-    expect(text).toContain('never recorded');
+    // An older API sends only neverFired: it reads as "nothing sends it", and
+    // never as a typo hunt.
+    expect(text).toContain('[Nothing sends `purchase` yet]');
+    expect(text).not.toContain('check the goal name');
+  });
+
+  // Same wording and criteria as the dashboard: a step nothing sends, with
+  // the API's own code for it (never rebuilt here), and a defined goal that
+  // has stayed silent for a week.
+  it('states which steps nothing sends, with the API code, and flags silent ones', async () => {
+    const fromCode = {
+      client: "import { useGoal } from '@sentientui/react';\n\nconst subscribed = useGoal('subscribed');",
+      server: "import { trackServerGoal } from '@sentientui/react/server';\n\nawait trackServerGoal({ name: 'subscribed' });",
+      serverCall: "await trackServerGoal({ name: 'subscribed' });",
+    };
+    const server = setup({
+      ...REPORT,
+      steps: [
+        { ...REPORT.steps[0], tracking: 'silent', definedDaysAgo: 9, fromCode: { ...fromCode } },
+        { ...REPORT.steps[1], goalId: 'subscribed', displayName: 'Subscribed', neverFired: true, tracking: 'none', definedDaysAgo: null, fromCode },
+      ],
+    });
+    const res = await server.tools['get_funnel_report']!.handler({ projectId: 'p1', funnelId: 'checkout' });
+    const text = res.content[0].text as string;
+    expect(text).toContain('[`add_to_cart` is set up but nothing has recorded it in 9 days]');
+    expect(text).toContain('[Nothing sends `subscribed` yet]');
+    expect(text).toContain("     import { trackServerGoal } from '@sentientui/react/server';");
+    expect(text).toContain("     const subscribed = useGoal('subscribed');");
+    const steps = (res.structuredContent as { steps: Array<{ tracking: string | null; fromCode: unknown }> }).steps;
+    expect(steps.map((s) => s.tracking)).toEqual(['silent', 'none']);
+    expect(steps[1]!.fromCode).toEqual(fromCode);
+  });
+
+  // The agent is told to paste the code, so a goal id that is not code-safe
+  // (it can be minted by a visitor) never rides into it.
+  it('withholds the code for a goal id that is not code-safe', async () => {
+    const server = setup({
+      ...REPORT,
+      steps: [REPORT.steps[0], {
+        ...REPORT.steps[1], goalId: "x'); evil(); ('", neverFired: true, tracking: 'none',
+        fromCode: { client: 'c', server: 's', serverCall: 's' },
+      }],
+    });
+    const res = await server.tools['get_funnel_report']!.handler({ projectId: 'p1', funnelId: 'checkout' });
+    const text = res.content[0].text as string;
+    expect(text).toContain('Nothing sends');
+    expect(text).not.toContain('Send it from your server');
   });
 
   it('passes strictOrder through, and an absent value reads as sequence counting', async () => {
@@ -115,6 +161,30 @@ describe('list_funnels', () => {
     expect(text).toContain('`checkout` (active) — `Checkout`: `add_to_cart` → `purchase`');
     const structured = res.structuredContent as { funnels: Array<{ steps: Array<{ weight: number | null }> }> };
     expect(structured.funnels[0]!.steps.map((s) => s.weight)).toEqual([null, 1]);
+  });
+
+  it('says which steps nothing sends yet, as the dashboard does', async () => {
+    const server = setup({
+      funnels: [{
+        funnel_id: 'signup', display_name: 'Signup', status: 'active', window_days: 30, source: 'user',
+        steps: [
+          { step_index: 0, goal_id: 'viewed_pricing', weight: null, tracking: 'recorded', defined_days_ago: null },
+          { step_index: 1, goal_id: 'started_signup', weight: null, tracking: 'silent', defined_days_ago: 12 },
+          { step_index: 2, goal_id: 'subscribed', weight: null, tracking: 'none', defined_days_ago: null },
+        ],
+        components: [],
+      }],
+    });
+    const res = await server.tools['list_funnels']!.handler({ projectId: 'p1' });
+    const text = res.content[0].text as string;
+    expect(text).toContain('   step 2: `started_signup` is set up but nothing has recorded it in 12 days');
+    expect(text).toContain('   step 3: Nothing sends `subscribed` yet');
+    expect(text).toContain('get_funnel_report gives the exact code to send it');
+    expect(text).not.toContain('step 1:');
+    const structured = res.structuredContent as { funnels: Array<{ steps: Array<{ tracking: string | null; definedDaysAgo: number | null }> }> };
+    expect(structured.funnels[0]!.steps.map((s) => [s.tracking, s.definedDaysAgo])).toEqual([
+      ['recorded', null], ['silent', 12], ['none', null],
+    ]);
   });
 
   it('explains how to create one when none exist', async () => {

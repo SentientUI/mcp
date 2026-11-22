@@ -31,6 +31,29 @@ describe('list_components', () => {
     expect(result.content[0].text).toContain('500');
   });
 
+  // Task 6: `variants={{ developer }}` reads as copy for developers; the
+  // tool says what the dashboard says — a name targets nobody.
+  it('surfaces versions named after a declared audience, with the dashboard\'s nudge', async () => {
+    const client = new ApiClient({ apiKey: 'sk_test' });
+    vi.spyOn(client, 'get').mockImplementation(async (path: string) => {
+      if (path.includes('/audience-named-versions')) {
+        return { versions: [
+          { componentId: 'hero', versionKey: 'developer', personaKey: 'developer', pinned: false, nudge: "a name doesn't target anyone" },
+          { componentId: 'hero', versionKey: 'pm', personaKey: 'pm', pinned: true, nudge: 'pinned already' },
+        ] } as any;
+      }
+      return { components: [{ component_id: 'hero', total_impressions: 5, total_conversions: 1, variants: [{ variant_id: 'developer' }] }], total: 1 } as any;
+    });
+    const server = makeServer();
+    registerComponentTools(server as any, client);
+    const result = await server.tools['list_components']!.handler({ projectId: 'p1' });
+    const text = result.content[0].text as string;
+    expect(text).toContain('Versions named after your audiences');
+    expect(text).toContain("a name doesn't target anyone");
+    expect(text).not.toContain('pinned already');
+    expect((result.structuredContent as { audienceNamedVersions: unknown[] }).audienceNamedVersions).toHaveLength(2);
+  });
+
   it('shows no-components message when list is empty', async () => {
     const client = new ApiClient({ apiKey: 'sk_test' });
     vi.spyOn(client, 'get').mockResolvedValue({ components: [], total: 0, page: 1, limit: 50 });
@@ -278,5 +301,98 @@ describe('get_variant_performance', () => {
   it('shows no-data message when no component has variants', async () => {
     const result = await run({ components: [], total: 0, nextCursor: null }, { cvr: [], momentum: [] });
     expect(result.content[0].text).toContain('No variant data');
+  });
+});
+
+// Regions (slot-path components) were invisible to both tools: measured
+// 2026-11-02, sentient-ui.com's live hybrid hero (hero_cta_v4) was missing from
+// every agent answer, which reported the retired v3 instead.
+describe('regions', () => {
+  const slots = {
+    window_totals: [{ slotId: 'hero_cta_v4', visitors: 5, conversions: 1 }],
+    slots: [
+      {
+        slotId: 'hero_cta_v4',
+        baselineArm: null,
+        arms: [
+          { arm: 'authored.action', timesShown: 3, conversions: 0, personas: [{ persona: 'unknown', personaDisplay: 'Everyone', timesShown: 3, evidence_state: 'not_enough_data', evidence_stats: { probBeatsControl: 0.2 } }] },
+          { arm: 'baseline', timesShown: 2, conversions: 0, personas: [] },
+          { arm: 'unknown_v1', timesShown: 4, conversions: 1, personas: [] },
+        ],
+      },
+    ],
+  };
+
+  function clientWith(slotsBody: unknown, defs: unknown = { slots: [] }) {
+    const client = new ApiClient({ apiKey: 'sk_test' });
+    const get = vi.spyOn(client, 'get').mockImplementation(async (path: string) => {
+      if (path.includes('/slot-definitions')) {
+        if (defs instanceof Error) throw defs;
+        return defs as never;
+      }
+      if (path.includes('/slots')) {
+        if (slotsBody instanceof Error) throw slotsBody;
+        return slotsBody as never;
+      }
+      if (path.includes('/components')) return { components: [], total: 0, nextCursor: null } as never;
+      return { cvr: [], momentum: [] } as never;
+    });
+    return { client, get };
+  }
+
+  it('list_components lists a region with its versions and where each came from', async () => {
+    const { client, get } = clientWith(slots);
+    const server = makeServer();
+    registerComponentTools(server as any, client);
+    const result = await server.tools['list_components']!.handler({ projectId: 'p1', range: '30d' });
+    const sc = result.structuredContent as { regions: Array<{ componentId: string; windowVisitors: number; versions: Array<{ versionId: string; source: string; timesShown: number }> }> };
+    expect(sc.regions).toHaveLength(1);
+    expect(sc.regions[0]!.componentId).toBe('hero_cta_v4');
+    expect(sc.regions[0]!.windowVisitors).toBe(5);
+    // Original first, then code, then generated.
+    expect(sc.regions[0]!.versions.map((v) => [v.versionId, v.source])).toEqual([
+      ['baseline', 'original'],
+      ['authored.action', 'code'],
+      ['unknown_v1', 'generated'],
+    ]);
+    expect(result.content[0].text).toContain('hero_cta_v4');
+    expect(result.content[0].text).not.toContain('No components');
+    // The window the agent asked for reaches /slots.
+    expect(get.mock.calls.find((c) => String(c[0]).includes('/slots'))![0]).toContain('range=30d');
+  });
+
+  // Astra Trade, 2026-11-19: versions typed by hand in the on-site editor
+  // were reported as generated — every non-original arm was.
+  it('says a version was written by a person when the API says so, and falls back to the arm id without it', async () => {
+    const defs = { slots: [{ slot_id: 'hero_cta_v4', arms: [{ id: 'baseline', source: 'original' }, { id: 'unknown_v1', source: 'manual' }] }] };
+    for (const [d, expected] of [[defs, 'written'], [new Error('defs down'), 'generated']] as const) {
+      const { client } = clientWith(slots, d);
+      const server = makeServer();
+      registerComponentTools(server as any, client);
+      const result = await server.tools['list_components']!.handler({ projectId: 'p1', range: '30d' });
+      const sc = result.structuredContent as { regions: Array<{ versions: Array<{ versionId: string; source: string }> }> };
+      expect(sc.regions[0]!.versions.find((v) => v.versionId === 'unknown_v1')!.source).toBe(expected);
+      if (expected === 'written') expect(result.content[0].text).toContain('(written by a person)');
+    }
+  });
+
+  it('get_variant_performance reports regions beside the windowed rows, labelled all-time', async () => {
+    const { client } = clientWith(slots);
+    const server = makeServer();
+    registerComponentTools(server as any, client);
+    const result = await server.tools['get_variant_performance']!.handler({ projectId: 'p1' });
+    const sc = result.structuredContent as { variants: unknown[]; regions: Array<{ versions: Array<{ evidence: Array<{ state: string }> }> }> };
+    expect(sc.variants).toEqual([]);
+    expect(sc.regions[0]!.versions[1]!.evidence[0]!.state).toBe('not_enough_data');
+    expect(result.content[0].text).toMatch(/all-time optimizer totals, not this window/);
+    expect(result.content[0].text).not.toContain('No variant data');
+  });
+
+  it('a failed /slots degrades to no regions instead of failing list_components', async () => {
+    const { client } = clientWith(new Error('slots down'));
+    const server = makeServer();
+    registerComponentTools(server as any, client);
+    const result = await server.tools['list_components']!.handler({ projectId: 'p1' });
+    expect((result.structuredContent as { regions: unknown[] }).regions).toEqual([]);
   });
 });

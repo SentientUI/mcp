@@ -34,7 +34,13 @@ async function main() {
     refreshApiKey = refreshDemoToken;
   }
 
-  const client = new ApiClient({ apiKey, baseUrl: process.env.SENTIENTUI_API_URL, refreshApiKey });
+  const client = new ApiClient({
+    apiKey,
+    baseUrl: process.env.SENTIENTUI_API_URL,
+    refreshApiKey,
+    // Names this client in the project's agent activity log.
+    agentClient: 'stdio MCP',
+  });
   const server = createMcpServer(client);
   const transport = new StdioServerTransport();
 

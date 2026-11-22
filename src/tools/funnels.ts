@@ -1,7 +1,7 @@
 import { z } from 'zod/v3';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ApiClient } from '../api-client.js';
-import { projectIdSchema, withApiErrorGuidance, untrusted, UNTRUSTED_FIELDS_NOTE } from './common.js';
+import { projectIdSchema, withApiErrorGuidance, untrusted, codeSafe, UNTRUSTED_FIELDS_NOTE } from './common.js';
 
 const funnelIdSchema = z.string().describe('Funnel slug (from list_funnels), e.g. "checkout"');
 
@@ -20,6 +20,23 @@ function stepChangeText(dropOffFromPrevious: number | null | undefined): string 
     return ` (${Math.round(-dropOffFromPrevious * 100)}% MORE than the previous step — some visitors reached it without the step before, or completed that step before this window)`;
   }
   return ` (${Math.round(dropOffFromPrevious * 100)}% drop-off from previous)`;
+}
+
+type Tracking = 'recorded' | 'defined' | 'silent' | 'none';
+const trackingSchema = z.enum(['recorded', 'defined', 'silent', 'none']).nullable()
+  .describe("What sends this step's goal: recorded (it has fired), defined (set up, nothing recorded yet, under 7 days), silent (set up 7+ days ago, never recorded), none (nothing sends it: no active definition and never fired, so this step can never fill). Null on an older API.");
+
+/**
+ * The dashboard's per-step wording, verbatim (`stepSourceText` in the
+ * dashboard's funnel-view.ts; criteria in the API's funnel-step-sources.ts).
+ * This said "never recorded — check the goal name" for every such step, so an
+ * agent told that about a backend step nobody had wired went hunting for a
+ * typo that was not there.
+ */
+export function stepSourceText(goalId: string, tracking: Tracking | null | undefined, definedDaysAgo: number | null | undefined): string | null {
+  if (tracking === 'none') return `Nothing sends ${untrusted(goalId)} yet`;
+  if (tracking === 'silent') return `${untrusted(goalId)} is set up but nothing has recorded it in ${definedDaysAgo ?? 7} days`;
+  return null;
 }
 
 export function registerFunnelTools(server: McpServer, client: ApiClient): void {
@@ -45,6 +62,8 @@ export function registerFunnelTools(server: McpServer, client: ApiClient): void 
                     stepIndex: z.number(),
                     goalId: z.string(),
                     weight: z.number().nullable().describe('Manual optimizer credit for reaching this step (null = automatic end-weighted)'),
+                    tracking: trackingSchema,
+                    definedDaysAgo: z.number().nullable().describe('Days since an unfired goal was set up (null once it fires)'),
                   }),
                 )
                 .describe('Ordered steps'),
@@ -66,7 +85,10 @@ export function registerFunnelTools(server: McpServer, client: ApiClient): void 
           status: string;
           window_days: number;
           source: string;
-          steps: Array<{ step_index: number; goal_id: string; weight: string | number | null }>;
+          steps: Array<{
+            step_index: number; goal_id: string; weight: string | number | null;
+            tracking?: Tracking; defined_days_ago?: number | null;
+          }>;
           components: Array<{ component_id: string; step_index: number | null }>;
         }>;
       }>(`/projects/${id}/funnels`);
@@ -83,6 +105,8 @@ export function registerFunnelTools(server: McpServer, client: ApiClient): void 
             stepIndex: s.step_index,
             goalId: s.goal_id,
             weight: s.weight == null ? null : Number(s.weight),
+            tracking: s.tracking ?? null,
+            definedDaysAgo: s.defined_days_ago ?? null,
           })),
           components: f.components.map((c) => ({ componentId: c.component_id, stepIndex: c.step_index ?? null })),
         })),
@@ -100,10 +124,20 @@ export function registerFunnelTools(server: McpServer, client: ApiClient): void 
 
       // Funnel steps reference goal ids, and goals are visitor-mintable via the
       // public pk_ key — delimit every name (see untrusted()).
-      const lines = structuredContent.funnels.map(
-        (f) => `${untrusted(f.funnelId)} (${f.status}) — ${untrusted(f.displayName)}: ${f.steps.map((s) => untrusted(s.goalId)).join(' → ')}`,
-      );
+      const lines: string[] = [];
+      let anyUnsourced = false;
+      for (const f of structuredContent.funnels) {
+        lines.push(`${untrusted(f.funnelId)} (${f.status}) — ${untrusted(f.displayName)}: ${f.steps.map((s) => untrusted(s.goalId)).join(' → ')}`);
+        for (const s of f.steps) {
+          const note = stepSourceText(s.goalId, s.tracking, s.definedDaysAgo);
+          if (note) lines.push(`   step ${s.stepIndex + 1}: ${note}`);
+          if (s.tracking === 'none') anyUnsourced = true;
+        }
+      }
       lines.push('', 'Reference a funnelId verbatim from code: <Adaptive funnel="<funnelId>">. Use get_funnel_report for drop-off numbers.');
+      if (anyUnsourced) {
+        lines.push('A step nothing sends can never fill: get_funnel_report gives the exact code to send it (useGoal in the browser, trackServerGoal on the server), or define it as a page visit with define_goal.');
+      }
       return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent };
     }),
   );
@@ -127,10 +161,17 @@ export function registerFunnelTools(server: McpServer, client: ApiClient): void 
               stepIndex: z.number(),
               goalId: z.string(),
               displayName: z.string(),
-              reached: z.number().describe('Distinct People reaching this step in-window'),
+              reached: z.number().describe('Distinct People reaching this step in-window, the control group included (reachedControl of them)'),
               unconfirmedReached: z.number().nullable().describe("Visitors we couldn't confirm as people who reached this step (the API's own remainder; not in reached or any drop-off); null on an older API"),
               dropOffFromPrevious: z.number().nullable().describe('1 - reached/previousReached (null on the first step)'),
-              neverFired: z.boolean().describe('True when the step goal has never been recorded anywhere — likely a typo'),
+              neverFired: z.boolean().describe('Legacy: no definition in any status and never recorded. Prefer tracking'),
+              tracking: trackingSchema,
+              definedDaysAgo: z.number().nullable().describe('Days since an unfired goal was set up (null once it fires)'),
+              fromCode: z.object({
+                client: z.string().describe('Browser code: useGoal from @sentientui/react'),
+                server: z.string().describe('Server code: trackServerGoal from @sentientui/react/server'),
+                serverCall: z.string(),
+              }).nullable().describe("Exact code that sends this step's goal, present until it first fires. Repeat it verbatim."),
               variants: z.array(z.object({
                 componentId: z.string(),
                 variantId: z.string(),
@@ -159,6 +200,8 @@ export function registerFunnelTools(server: McpServer, client: ApiClient): void 
         steps: Array<{
           stepIndex: number; goalId: string; displayName: string; reached: number; unconfirmedReached?: number;
           dropOffFromPrevious: number | null; neverFired: boolean;
+          tracking?: Tracking; definedDaysAgo?: number | null;
+          fromCode?: { client: string; server: string; serverCall: string } | null;
           variants: Array<{ componentId: string; variantId: string; reached: number; assigned: number }>;
           personas: Array<{ label: string; reached: number }>;
         }>;
@@ -173,12 +216,23 @@ export function registerFunnelTools(server: McpServer, client: ApiClient): void 
       // the public ingest path — all visitor-mintable, so delimit them.
       const lines: string[] = [`${untrusted(data.displayName)} — last ${data.windowDays} days`];
       for (const s of data.steps) {
+        // An API from before step sources sends only neverFired: read it as
+        // "nothing sends it", as the dashboard does.
+        const tracking: Tracking | null = s.tracking ?? (s.neverFired ? 'none' : null);
+        const note = stepSourceText(s.goalId, tracking, s.definedDaysAgo);
         lines.push(
           `${s.stepIndex + 1}. ${untrusted(s.displayName)}: ${s.reached} People reached` +
           (s.unconfirmedReached ? ` (${s.unconfirmedReached} more from visitors we couldn't confirm as people)` : '') +
           stepChangeText(s.dropOffFromPrevious) +
-          (s.neverFired ? ' [never recorded — check the goal name]' : ''),
+          (note ? ` [${note}]` : ''),
         );
+        // The API's code, verbatim — never rebuilt here, so it cannot drift
+        // from what the dashboard shows. Only for a code-safe goal id: the
+        // agent is told to paste this, and a minted name must not ride in it.
+        if (tracking === 'none' && s.fromCode && codeSafe(s.goalId) === s.goalId) {
+          lines.push('   Send it from your server:', ...s.fromCode.server.split('\n').map((l) => `     ${l}`));
+          lines.push('   …or from the browser:', ...s.fromCode.client.split('\n').map((l) => `     ${l}`));
+        }
         for (const v of s.variants) {
           lines.push(`   ${untrusted(v.componentId)}/${untrusted(v.variantId)}: ${v.reached}/${v.assigned} assigned sessions reached this step`);
         }
@@ -205,7 +259,13 @@ export function registerFunnelTools(server: McpServer, client: ApiClient): void 
           ...data,
           strictOrder: data.strictOrder ?? true,
           unconfirmedRevenue: data.unconfirmedRevenue ?? null,
-          steps: data.steps.map((s) => ({ ...s, unconfirmedReached: s.unconfirmedReached ?? null })),
+          steps: data.steps.map((s) => ({
+            ...s,
+            unconfirmedReached: s.unconfirmedReached ?? null,
+            tracking: s.tracking ?? null,
+            definedDaysAgo: s.definedDaysAgo ?? null,
+            fromCode: s.fromCode ?? null,
+          })),
         },
       };
     }),

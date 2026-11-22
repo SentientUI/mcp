@@ -33,6 +33,15 @@ describe('get_integration_guide', () => {
     expect(text).toContain('suppressHydrationWarning');
   });
 
+  it('says to allow the deployed origin, and how a refused one shows up', async () => {
+    const server = makeServer();
+    registerIntegrationGuideTools(server as any);
+    const text = (await server.tools['get_integration_guide']!.handler({})).content[0].text as string;
+    expect(text).toMatch(/After you deploy or publish the site, allow its origin/);
+    expect(text).toContain('add_origin');
+    expect(text).toContain('403 origin_not_allowed');
+  });
+
   it('teaches the two-tag no-code install, with the three-tag form for strict CSP', async () => {
     const server = makeServer();
     registerIntegrationGuideTools(server as any);
@@ -45,6 +54,45 @@ describe('get_integration_guide', () => {
     // Config before pre-paint before loader, in the prose order.
     expect(section.indexOf('window.sentient')).toBeLessThan(section.indexOf('pre-paint script'));
     expect(section.indexOf('pre-paint script')).toBeLessThan(section.indexOf('deferred'));
+  });
+
+  // An agent following the old guide put <AdaptiveRoot> in app/layout.tsx. It
+  // reads the request on every route it wraps: one customer's marketing site
+  // went from 26 of 27 pages served from the edge cache to none.
+  it('wraps the root layout in the provider and keeps AdaptiveRoot per page', async () => {
+    const server = makeServer();
+    registerIntegrationGuideTools(server as any);
+    const result = await server.tools['get_integration_guide']!.handler({});
+    const text = result.content[0].text as string;
+    expect(text).toContain('Wrap the root layout with <AdaptiveProvider apiKey>');
+    expect(text).toContain('Do NOT put <AdaptiveRoot>');
+    expect(text).toMatch(/every route under it renders on demand/);
+    expect(text).toMatch(/wrap THE PAGE that renders the region in\s+<AdaptiveRoot>/);
+    // Capture of AI crawlers must not be a reason to wrap the whole app either.
+    expect(text).toContain('Do not wrap the whole app in AdaptiveRoot to get capture');
+  });
+
+  // Hydrogen's default CSP leaves our API out of connect-src. The spike found
+  // the page looking correct while every SDK request was refused, so an agent
+  // that skips this step ships an install that records nothing.
+  it('teaches the Hydrogen install, with the CSP step for both Hydrogen lines', async () => {
+    const server = makeServer();
+    registerIntegrationGuideTools(server as any);
+    const text = (await server.tools['get_integration_guide']!.handler({})).content[0].text as string;
+    const section = text.slice(text.indexOf('## Shopify Hydrogen'), text.indexOf('## Rung 1'));
+    expect(section.length).toBeGreaterThan(0);
+    // Pointed to from Setup, so an agent reading top-down cannot miss it.
+    expect(text.indexOf('On Shopify Hydrogen, follow the next section')).toBeLessThan(text.indexOf('## Shopify Hydrogen'));
+    expect(section).toContain("connectSrc: ['https://api.sentient-ui.com']");
+    expect(section).toContain("directives: { connectSrc: ['https://api.sentient-ui.com'] }");
+    expect(section).toContain('nonce={nonce}');
+    expect(section).toContain('suppressHydrationWarning');
+    expect(section).toContain('consentFrom="shopify"');
+    expect(section).toContain("useGoal('add_to_cart')");
+    expect(section).toContain("Never import '@sentientui/react/next'");
+    expect(section).toContain('add_origin');
+    expect(section).toMatch(/Never return the sk_ key from a loader/);
+    expect(section).toMatch(/not yet tested on a live Hydrogen store/);
   });
 
   it('teaches campaigns: tagged links, the first page, and searchParams only where a page renders AdaptiveRoot', async () => {

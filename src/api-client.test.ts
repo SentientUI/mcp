@@ -4,6 +4,7 @@ const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
 import { ApiClient } from './api-client.js';
+import { withApiErrorGuidance } from './tools/common.js';
 
 describe('ApiClient', () => {
   let client: ApiClient;
@@ -121,5 +122,43 @@ describe('ApiClient', () => {
     await client.delete('/projects/abc/variants', { componentId: 'hero' });
     expect(mockFetch.mock.calls[0]![1]).toMatchObject({ method: 'PATCH', body: JSON.stringify({ componentId: 'hero' }) });
     expect(mockFetch.mock.calls[1]![1]).toMatchObject({ method: 'DELETE', body: JSON.stringify({ componentId: 'hero' }) });
+  });
+
+  it('sends PUT with a JSON body', async () => {
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ ok: true }) });
+    await client.put('/projects/abc/agent-access', { generate: false });
+    expect(mockFetch.mock.calls[0]![1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ generate: false }) });
+  });
+
+  it('sends agentClient as x-sentient-agent-client, and omits the header otherwise', async () => {
+    mockFetch.mockResolvedValue({ ok: true, json: async () => [] });
+    const labelled = new ApiClient({ apiKey: 'sk_k', baseUrl: 'https://api.example.com', agentClient: 'stdio MCP' });
+    await labelled.get('/projects');
+    expect(mockFetch.mock.calls[0]![1].headers).toMatchObject({ 'x-sentient-agent-client': 'stdio MCP' });
+    await client.get('/projects');
+    expect(mockFetch.mock.calls[1]![1].headers).not.toHaveProperty('x-sentient-agent-client');
+  });
+
+  it('an agent_access_off 403 reaches the agent with the server sentence and a do-not-retry note', async () => {
+    const sentence =
+      'Agent access to Project settings is off for this project. A person can turn it on in Settings \u2192 Agent access.';
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: async () => ({ error: 'agent_access_off', area: 'settings', message: sentence }),
+    });
+    await expect(client.put('/projects/p/settings', {})).rejects.toMatchObject({
+      status: 403,
+      message: 'agent_access_off',
+      detail: sentence,
+    });
+    const tool = withApiErrorGuidance(async () => {
+      await client.put('/projects/p/settings', {});
+      return { content: [{ type: 'text' as const, text: 'ok' }] };
+    });
+    const out = await tool({});
+    expect(out.isError).toBe(true);
+    expect(out.content[0]!.text).toContain('Agent access to Project settings is off');
+    expect(out.content[0]!.text).toMatch(/do not retry/i);
   });
 });

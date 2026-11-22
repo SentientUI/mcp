@@ -68,6 +68,30 @@ describe('get_project_stats', () => {
     const result = await server.tools['get_project_stats']!.handler({ projectId: 'p1' });
     expect(result.content[0].text).toContain('healthy');
     expect(result.content[0].text).toContain('500');
+    // An older API sends no rejectedOrigins: nothing is invented.
+    expect(result.content[0].text).not.toContain('turned away');
+    expect((result.structuredContent as { rejectedOrigins: unknown }).rejectedOrigins).toEqual([]);
+  });
+
+  it('surfaces sustained turned-away domains with the API sentence, as minutes with traffic', async () => {
+    const message =
+      "Visits from https://www.mysite.com are being turned away because it isn't on the project's allowed domains — " +
+      '120 minutes with traffic since 2026-10-28 (counted at most once a minute, not per request). Allow it only if it is one of your sites.';
+    vi.spyOn(client, 'get').mockResolvedValue({
+      status: 'offline', events24h: 0, sessions24h: 0, agentCalls: 0, lastEventAt: null,
+      rejectedOrigins: [{
+        origin: 'https://www.mysite.com', count: 120, firstSeenAt: '2026-10-28T00:00:00.000Z',
+        lastSeenAt: '2026-11-04T00:00:00.000Z', message,
+      }],
+    });
+    const result = await server.tools['get_project_stats']!.handler({ projectId: 'p1' });
+    expect(result.content[0].text).toContain('Domains turned away');
+    expect(result.content[0].text).toContain('add_origin');
+    expect(result.content[0].text).toContain(message);
+    expect((result.structuredContent as { rejectedOrigins: unknown }).rejectedOrigins).toEqual([{
+      origin: 'https://www.mysite.com', minutesWithTraffic: 120, firstSeenAt: '2026-10-28T00:00:00.000Z',
+      lastSeenAt: '2026-11-04T00:00:00.000Z', message,
+    }]);
   });
 });
 
@@ -154,6 +178,18 @@ describe('add_origin', () => {
     });
     expect(result.content[0].text).toContain('`https://shop.example.com`');
   });
+
+  // An agent that just deployed a site (ChatGPT Sites, 2026-11-21) saw every
+  // request 403 and never learned this tool was the fix.
+  it('tells an agent that just deployed a site to allow its origin, and what the refusal looks like', () => {
+    const server = makeServer();
+    registerProjectTools(server as any, new ApiClient({ apiKey: 'sk_test' }));
+    const call = server.registerTool.mock.calls.find((c) => c[0] === 'add_origin')!;
+    const description = (call[1] as { description: string }).description;
+    expect(description).toMatch(/right after you deploy or publish a site/);
+    expect(description).toContain('403 origin_not_allowed');
+    expect(description).toMatch(/first https origin by itself, once/);
+  });
 });
 
 // Audit M18: agentCalls was described as "MCP/API" calls, but the API counts
@@ -201,5 +237,36 @@ describe('get_project_stats against an older API', () => {
     expect(result.structuredContent).toMatchObject({ sessions24h: 4, people: null, beingAnalysed: null, automated: null });
     expect(result.content[0]!.text).toContain('Sessions (24h): 4');
     expect(result.content[0]!.text).not.toMatch(/People \(24h\)|Being analysed|Automated:/);
+  });
+});
+
+describe('get_project_stats internal slice', () => {
+  it('reports Your team / test sites from the breakdown groups when the API sends the class', async () => {
+    const client = new ApiClient({ apiKey: 'sk_test' });
+    vi.spyOn(client, 'get').mockResolvedValue({
+      status: 'ok', events24h: 9, sessions24h: 4, people: 4, agentCalls: 0, lastEventAt: null,
+      traffic: {
+        people: 4, beingAnalysed: 0, automated: 1,
+        groups: [{ group: 'people', count: 4 }, { group: 'other_automated', count: 1 }, { group: 'internal', count: 6 }],
+      },
+    });
+    const server = makeServer();
+    registerProjectTools(server as any, client);
+    const result = await server.tools['get_project_stats']!.handler({ projectId: 'p1' });
+    expect(result.structuredContent).toMatchObject({ people: 4, automated: 1, internal: 6 });
+    expect(result.content[0]!.text).toContain('Your team / test sites (marked internal, not counted): 6');
+  });
+
+  it('says nothing, and returns null, when the API predates the class', async () => {
+    const client = new ApiClient({ apiKey: 'sk_test' });
+    vi.spyOn(client, 'get').mockResolvedValue({
+      status: 'ok', events24h: 9, sessions24h: 4, people: 4, agentCalls: 0, lastEventAt: null,
+      traffic: { people: 4, beingAnalysed: 0, automated: 1, groups: [{ group: 'people', count: 4 }] },
+    });
+    const server = makeServer();
+    registerProjectTools(server as any, client);
+    const result = await server.tools['get_project_stats']!.handler({ projectId: 'p1' });
+    expect(result.structuredContent).toMatchObject({ internal: null });
+    expect(result.content[0]!.text).not.toMatch(/team/i);
   });
 });

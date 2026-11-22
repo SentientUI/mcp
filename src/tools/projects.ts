@@ -62,6 +62,7 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
             `Created project "${name}" (id: ${created.id}, type: ${resolvedContextType}).`,
             `Public key: ${created.apiKey}`,
             `Next: install @sentientui/react with this key. Ask me to pull the setup guide (get_integration_guide) and I'll wrap your first component.`,
+            `Once the site is deployed, its origin must be allowed (add_origin) — the first https origin is allowed automatically, once, while the project is new and has no live domain.`,
           ].join('\n'),
         }],
         structuredContent: {
@@ -84,6 +85,10 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
       title: 'Add allowed origin',
       description:
         "Allow-list a site origin (scheme + host, e.g. https://www.example.com) so the SDK's events from it are accepted. " +
+        'Call it right after you deploy or publish a site that uses SentientUI (a ChatGPT Sites, Lovable, v0, Vercel or Netlify URL, or ' +
+        'a custom domain): until its origin is allowed, every request from it gets 403 origin_not_allowed (the response body and a ' +
+        'browser console warning name the refused origin) and nothing is recorded. A project in its first 14 days with no live domain ' +
+        'yet allows its first https origin by itself, once — every later domain (www vs apex, staging, previews) needs this. ' +
         'Idempotent: an origin already on the list is left as is. Removing an origin is dashboard-only. Needs an editor/admin ' +
         "login or the project's sk_ server key. Confirm the exact origin with the user first — an allowed origin can send events into this project.",
       inputSchema: {
@@ -171,7 +176,9 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
       description:
         'Get ingestion health for a project: status, events in the last 24 hours, the People count for the same window (visitors who ran the page, interacted and passed the bot check), ' +
         'how many visitors are still being analysed, how many are automated, the time of the last event, ' +
-        'and the all-time count of calls to the SentientUI agent API (/v1/agent) — NOT MCP tool calls.',
+        'and the all-time count of calls to the SentientUI agent API (/v1/agent) — NOT MCP tool calls. ' +
+        'Also lists domains the snippet keeps running on that are NOT allowed, so their visits are turned away ' +
+        '(the usual answer to "why isn\'t my site tracking?"; fix with add_origin). Use this first when a site reports no data.',
       inputSchema: { projectId: projectIdSchema },
       outputSchema: {
         status: z.string().describe('Overall project health status'),
@@ -182,11 +189,28 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
         people: z.number().nullable().describe('People in the last 24 hours: visitors who ran the page, interacted and passed the bot check; null when the API predates the traffic classification'),
         beingAnalysed: z.number().nullable().describe('Visitors still being analysed — usually settled within 3 hours; null on an older API'),
         automated: z.number().nullable().describe('Automated visitors: AI assistants, search & AI crawlers and other automated; null on an older API'),
+        internal: z
+          .number()
+          .nullable()
+          .describe('Visitors the project marked internal (Your team / test sites): never People, never counted; null when the API sends no such group'),
         // Was "Total agent (MCP/API) calls" — but the count comes from
         // agent_events, which only the /v1/agent endpoint writes. MCP tool calls
         // are never in it, so an agent read its own activity as missing.
         agentCalls: z.number().describe('All-time calls to the /v1/agent agent API (not MCP tool calls)'),
         lastEventAt: z.string().nullable().describe('ISO timestamp of the last event, or null'),
+        rejectedOrigins: z
+          .array(
+            z.object({
+              origin: z.string(),
+              minutesWithTraffic: z.number().describe('Minutes in which visits were turned away — recorded at most once a minute, NOT a request count'),
+              firstSeenAt: z.string(),
+              lastSeenAt: z.string(),
+              message: z.string(),
+            }),
+          )
+          .describe(
+            'Sustained turned-away domains: at least 50 minutes with traffic over at least 2 days, previews, translate proxies and trailing-dot variants excluded. Empty on an older API.',
+          ),
       },
       annotations: {
         readOnlyHint: true,
@@ -201,10 +225,23 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
         events24h: number;
         sessions24h: number;
         people?: number;
-        traffic?: { people?: number; beingAnalysed?: number; automated?: number };
+        traffic?: { people?: number; beingAnalysed?: number; automated?: number; groups?: Array<{ group: string; count: number }> };
         agentCalls: number;
         lastEventAt: string | null;
+        rejectedOrigins?: Array<{ origin: string; count: number; firstSeenAt: string; lastSeenAt: string; message: string }>;
       }>(`/projects/${id}/health`);
+
+      // A site whose real domain was never allowed sends nothing, which read
+      // here as "no traffic" — the agent had no way to tell the two apart. The
+      // API applies the sustained criteria and writes the sentence, so this,
+      // the dashboard and the notification say the same thing.
+      const rejectedOrigins = (stats.rejectedOrigins ?? []).map((r) => ({
+        origin: r.origin,
+        minutesWithTraffic: r.count,
+        firstSeenAt: r.firstSeenAt,
+        lastSeenAt: r.lastSeenAt,
+        message: r.message,
+      }));
 
       // An API from before the traffic classification sends only sessions24h,
       // which is raw sessions there. Printing it as People, or filling the other
@@ -215,15 +252,31 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
       const people = classified ? peopleCount : null;
       const beingAnalysed = classified ? (stats.traffic?.beingAnalysed ?? 0) : null;
       const automated = classified ? (stats.traffic?.automated ?? 0) : null;
+      // From the breakdown's own groups, only when the API sends the class: a
+      // 0 filled in for an API that predates it would claim no team traffic
+      // was checked for, when it simply was not.
+      const internalGroup = stats.traffic?.groups?.find((g) => g.group === 'internal');
+      const internal = internalGroup ? internalGroup.count : null;
 
       const text = [
         `Status: ${stats.status}`,
         `Events (24h): ${stats.events24h}`,
         ...(classified
-          ? [`People (24h): ${people}`, `Being analysed: ${beingAnalysed}`, `Automated: ${automated}`]
+          ? [
+              `People (24h): ${people}`,
+              `Being analysed: ${beingAnalysed}`,
+              `Automated: ${automated}`,
+              ...(internal !== null ? [`Your team / test sites (marked internal, not counted): ${internal}`] : []),
+            ]
           : [`Sessions (24h): ${stats.sessions24h}`]),
         `Agent API calls (/v1/agent, all-time): ${stats.agentCalls}`,
         `Last event: ${stats.lastEventAt ?? 'never'}`,
+        ...(rejectedOrigins.length
+          ? [
+              'Domains turned away (not on the allowed list — fix with add_origin if they are your sites):',
+              ...rejectedOrigins.map((r) => `- ${r.message}`),
+            ]
+          : []),
       ].join('\n');
 
       return {
@@ -235,8 +288,10 @@ export function registerProjectTools(server: McpServer, client: ApiClient): void
           people,
           beingAnalysed,
           automated,
+          internal,
           agentCalls: stats.agentCalls,
           lastEventAt: stats.lastEventAt,
+          rejectedOrigins,
         },
       };
     }),

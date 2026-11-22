@@ -291,16 +291,18 @@ describe('get_insights', () => {
 });
 
 describe('get_persona_breakdown', () => {
-  it('returns cluster summary with percentages', async () => {
+  it('returns served-as audiences with their share', async () => {
     const client = new ApiClient({ apiKey: 'sk_test' });
     vi.spyOn(client, 'get').mockResolvedValue({
-      clusters: [{ label: 'admins', sessionCount: 120, avgReliability: 0.75 }],
-      totalSessions: 300,
+      windowDays: 30,
+      totalPeople: 300,
+      personas: [{ key: 'admins', name: 'Declared: Admins', kind: 'declared', people: 120, sharePct: 40 }],
+      behaviourGroups: [],
     });
     const server = makeServer();
     registerPersonaTools(server as any, client);
     const result = await server.tools['get_persona_breakdown']!.handler({ projectId: 'p1' });
-    expect(result.content[0].text).toContain('admins');
+    expect(result.content[0].text).toContain('Admins');
     expect(result.content[0].text).toContain('120');
     expect(result.content[0].text).toContain('40.0%');
   });

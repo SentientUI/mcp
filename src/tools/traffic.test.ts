@@ -92,4 +92,22 @@ describe('get_traffic_breakdown', () => {
     expect(res.content[0]!.text).toMatch(/shorter range/i);
     expect(res.content[0]!.text).toContain('Narrow the window');
   });
+
+  it('lists the internal slice under its label and says where it comes from', async () => {
+    const withInternal = {
+      ...BREAKDOWN,
+      total: 108,
+      groups: [...BREAKDOWN.groups, { group: 'internal', label: 'Your team / test sites', count: 8, evidence: [] }],
+    };
+    const { server } = setup(() => withInternal);
+    const text = (await server.tools['get_traffic_breakdown']!.handler({ projectId: 'p1' })).content[0]!.text;
+    expect(text).toContain('- Your team / test sites: 8');
+    expect(text).toContain('get_internal_traffic_rules');
+  });
+
+  it('adds no internal sentence when nothing is marked internal', async () => {
+    const { server } = setup(() => BREAKDOWN);
+    const text = (await server.tools['get_traffic_breakdown']!.handler({ projectId: 'p1' })).content[0]!.text;
+    expect(text).not.toContain('marked internal');
+  });
 });

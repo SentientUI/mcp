@@ -28,6 +28,7 @@ import {
   verdictOf,
   type Verdict,
 } from './evidence.js';
+import { fetchRegions, regionOutputSchema, regionText, type Region } from './regions.js';
 
 type PerfComponentRow = {
   component_id: string;
@@ -61,7 +62,8 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
     {
       title: 'List components',
       description:
-        'List all adaptive components in a project with variant counts and impression totals. ' +
+        'List all adaptive components in a project with variant counts and impression totals, plus `regions`: components served per visitor ' +
+        '(an <Adaptive> wrapping children — versions written in code next to the original, or generated in Who sees what) with each version\'s all-time times shown and evidence. ' +
         'Counts cover all retained data by default; pass range or from/to for a window. Impressions and conversions are People\'s; unconfirmedConversions is the API\'s count from visitors we couldn\'t confirm as people (not included in conversions).' + UNTRUSTED_FIELDS_NOTE,
       inputSchema: { projectId: projectIdSchema, ...rangeInputSchema('all') },
       outputSchema: {
@@ -78,7 +80,19 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
           .describe('Adaptive components in the project (empty if none)'),
         total: z.number().describe('Total components in the project — larger than the list when truncated'),
         truncated: z.boolean().describe('True when the fetch cap was hit before listing every component'),
+        regions: regionOutputSchema,
         window: windowOutputSchema,
+        audienceNamedVersions: z
+          .array(
+            z.object({
+              componentId: z.string(),
+              versionKey: z.string(),
+              personaKey: z.string().describe('The declared audience the key is named after'),
+              pinned: z.boolean().describe('Already pinned to that audience'),
+              nudge: z.string().describe('What the dashboard says about it — quote it'),
+            }),
+          )
+          .describe('Versions whose key names one of the project\'s declared audiences. A name targets nobody: declare the persona on the site, then pin the version. Empty on an older API'),
       },
       annotations: {
         readOnlyHint: true,
@@ -91,13 +105,33 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
       // (API default: 50/page), so a project's 51st component silently never
       // existed as far as any agent could tell. Fetch every page (bounded) and
       // say so when the bound cuts the list short.
-      const { components, total, window, truncated } = await fetchAllComponents<{
-        component_id: string;
-        total_impressions: number;
-        total_conversions: number;
-        total_unconfirmed_conversions?: number;
-        variants: Array<{ variant_id: string }>;
-      }>(client, projectId, { rangeArgs: { range, from, to } });
+      const [componentsRes, regionsRes, namedRes] = await Promise.all([
+        settled(fetchAllComponents<{
+          component_id: string;
+          total_impressions: number;
+          total_conversions: number;
+          total_unconfirmed_conversions?: number;
+          variants: Array<{ variant_id: string }>;
+        }>(client, projectId, { rangeArgs: { range, from, to } })),
+        settled(fetchRegions(client, projectId, { range, from, to })),
+        // Task 6: `variants={{ developer }}` reads as "developer copy for
+        // developers", and nothing told the developer a key targets nobody.
+        // Additive and best-effort, like regions.
+        settled(client.get<{ versions: Array<{ componentId: string; versionKey: string; personaKey: string; pinned: boolean; nudge: string }> }>(
+          `/projects/${encodeURIComponent(projectId)}/audience-named-versions`,
+        )),
+      ]);
+      // /components stays the primary source; regions are additive, so a
+      // failed /slots degrades to "no regions" instead of failing the tool.
+      throwIfNotDegradable([componentsRes, regionsRes]);
+      if (!componentsRes.ok) throw componentsRes.error;
+      const { components, total, window, truncated } = componentsRes.value;
+      const regions: Region[] = regionsRes.ok ? regionsRes.value : [];
+      const audienceNamedVersions = namedRes.ok
+        ? (namedRes.value.versions ?? []).map((v) => ({
+            componentId: v.componentId, versionKey: v.versionKey, personaKey: v.personaKey, pinned: v.pinned, nudge: v.nudge,
+          }))
+        : [];
 
       const structuredContent = {
         components: components.map((c) => ({
@@ -109,10 +143,12 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
         })),
         total,
         truncated,
+        regions,
         window,
+        audienceNamedVersions,
       };
 
-      if (!components.length) {
+      if (!components.length && !regions.length) {
         return {
           content: [{ type: 'text' as const, text: 'No components found for this project.' }],
           structuredContent,
@@ -127,6 +163,17 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
       );
       if (truncated) {
         lines.push(`Showing ${components.length} of ${total} components — fetch cap reached; the rest exist but are not listed here.`);
+      }
+      if (regions.length) {
+        if (lines.length) lines.push('');
+        lines.push('Regions (served per visitor; times shown are all-time optimizer totals):');
+        for (const r of regions) lines.push(regionText(r, untrusted));
+      }
+      if (!regionsRes.ok) lines.push('', 'Regions could not be read just now — components served per visitor may be missing from this list.');
+      const unpinned = audienceNamedVersions.filter((v) => !v.pinned);
+      if (unpinned.length) {
+        lines.push('', 'Versions named after your audiences (a name doesn\'t target anyone):');
+        for (const v of unpinned) lines.push(`- ${untrusted(v.componentId)} / ${untrusted(v.versionKey)}: ${v.nudge}`);
       }
 
       return { content: [{ type: 'text' as const, text: lines.join('\n') }], structuredContent };
@@ -146,7 +193,8 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
         'falls back to the all-time verdict on older APIs (`verdictBasis` = all_time). The all-time verdict is ' +
         'also reported separately as reliability (`evidenceState`, `reliabilityVerdict`) — that all-time reliability is the optimizer\'s own evidence, not a People-only figure. ' +
         'Only ahead/behind is a comparative result; raw rates are not a ranking. ' +
-        'The change vs the preceding window is an untested descriptor.' + UNTRUSTED_FIELDS_NOTE,
+        'The change vs the preceding window is an untested descriptor. ' +
+        '`regions` lists components served per visitor (versions written in code or generated) with their all-time optimizer totals and per-audience evidence — not windowed, so never compare them with the windowed rows.' + UNTRUSTED_FIELDS_NOTE,
       inputSchema: { projectId: projectIdSchema, ...rangeInputSchema('7d') },
       _meta: uiMeta('variant-performance'),
       outputSchema: {
@@ -192,6 +240,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
           )
           .describe('Per-(component, variant) performance (empty if no data yet)'),
         truncated: z.boolean().describe('True when the component fetch cap was hit before every component was read'),
+        regions: regionOutputSchema,
         window: windowOutputSchema,
       },
       annotations: {
@@ -202,17 +251,19 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
     },
     withApiErrorGuidance(async ({ projectId, range, from, to }: { projectId: string } & RangeArgs) => {
       const id = encodeURIComponent(projectId);
-      const [componentsRes, trendsRes] = await Promise.all([
+      const [componentsRes, trendsRes, regionsRes] = await Promise.all([
         settled(fetchAllComponents<PerfComponentRow>(client, projectId, { rangeArgs: { range, from, to } })),
         settled(client.get<TrendsResponse>(`/projects/${id}/trends${rangeQuery({ range, from, to })}`)),
+        settled(fetchRegions(client, projectId, { range, from, to })),
       ]);
       // The components payload is the primary source (per-component counts and
       // the server's evidence); without it there is nothing honest to say, so
       // its failure is the tool's failure. /trends is optional context.
-      throwIfNotDegradable([componentsRes, trendsRes]);
+      throwIfNotDegradable([componentsRes, trendsRes, regionsRes]);
       if (!componentsRes.ok) throw componentsRes.error;
       const { components, window, truncated } = componentsRes.value;
       const trends = trendsRes.ok ? trendsRes.value : null;
+      const regions: Region[] = regionsRes.ok ? regionsRes.value : [];
 
       // /trends is keyed by (componentId, variantId). An older API grouped by
       // variant_id ONLY, so a `control` present on three components came back
@@ -359,9 +410,12 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
         textBlocks.push(block.join('\n'));
       }
 
-      const structuredContent = { variants: rows, truncated, window };
+      const structuredContent = { variants: rows, truncated, regions, window };
+      const regionBlock = regions.length
+        ? ['', 'Regions (served per visitor — all-time optimizer totals, not this window):', ...regions.map((r) => regionText(r, untrusted))]
+        : [];
 
-      if (!rows.length) {
+      if (!rows.length && !regions.length) {
         return {
           content: [{ type: 'text' as const, text: 'No variant data available yet.' }],
           structuredContent,
@@ -379,7 +433,7 @@ export function registerComponentTools(server: McpServer, client: ApiClient): vo
           'only "ahead"/"behind" is a result; do not rank arms by raw rate.',
       ].filter(Boolean);
       const footer = truncated ? ['', 'Fetch cap reached — some components are not listed.'] : [];
-      const text = [...header, '', textBlocks.join('\n\n'), ...footer].join('\n');
+      const text = [...header, '', textBlocks.join('\n\n'), ...footer, ...regionBlock].join('\n');
       return { content: [{ type: 'text' as const, text }], structuredContent, _meta: uiMeta('variant-performance') };
     }),
   );

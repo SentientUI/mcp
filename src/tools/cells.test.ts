@@ -255,6 +255,63 @@ describe('list_cell_reviews', () => {
     const result = await server.tools['list_cell_reviews']!.handler({ projectId: PROJECT_ID });
     expect((result as { content: Array<{ text: string }> }).content[0]!.text).toContain('No generated versions are waiting');
   });
+
+  // The review view draws a redesigned section from its outline and disables
+  // Approve when the API would refuse it; zod used to strip all of these.
+  it('keeps outline, page, refusal flags and the project id for the review view', async () => {
+    vi.spyOn(client, 'get').mockResolvedValue({
+      palette: {},
+      reviews: [
+        {
+          slotId: 'hero', slotName: 'Hero', persona: 'c-spring', personaDisplay: 'Campaign: Spring',
+          pendingArm: { compose: { tree: {} } }, rationale: null, refinedFrom: null, updatedAt: '2026-09-30T00:00:00Z',
+          outline: [{ depth: 0, kind: 'heading 2', style: 'Headline', text: 'Spring sale' }, 'junk'],
+          page: '/pricing', audienceRetired: true, otherSide: false,
+        },
+      ],
+      total: 1,
+    });
+    const result = await server.tools['list_cell_reviews']!.handler({ projectId: PROJECT_ID });
+    const sc = z.object(server.tools['list_cell_reviews']!.config.outputSchema!).parse(
+      (result as { structuredContent: unknown }).structuredContent,
+    );
+    expect(sc.projectId).toBe(PROJECT_ID);
+    expect(sc.reviews[0]).toMatchObject({
+      content: null,
+      outline: [{ depth: 0, kind: 'heading 2', style: 'Headline', text: 'Spring sale' }],
+      page: '/pricing',
+      audienceRetired: true,
+      otherSide: false,
+    });
+    expect((result as { content: Array<{ text: string }> }).content[0]!.text).toContain('approving is refused');
+  });
+
+  it('opens the review view (MCP Apps _meta.ui.resourceUri)', () => {
+    const meta = (server.tools['list_cell_reviews']!.config as { _meta?: { ui?: { resourceUri?: string } } })._meta;
+    expect(meta?.ui?.resourceUri).toBe('ui://sentientui/cell-review');
+  });
+});
+
+// The view's buttons call an app-only twin of review_cell, so hiding it from
+// the agent removes nothing the agent could do before.
+describe('review_cell_from_view', () => {
+  it('is app-only while review_cell stays model-callable', () => {
+    const appMeta = (server.tools['review_cell_from_view']!.config as { _meta?: { ui?: { visibility?: string[] } } })._meta;
+    expect(appMeta?.ui?.visibility).toEqual(['app']);
+    const agentMeta = (server.tools['review_cell']!.config as { _meta?: { ui?: { visibility?: string[] } } })._meta;
+    expect(agentMeta?.ui?.visibility).toBeUndefined();
+  });
+
+  it('posts the same review route as review_cell, feedback included', async () => {
+    const postSpy = vi.spyOn(client, 'post').mockResolvedValue({ ok: true, status: 'rejected' });
+    const result = await server.tools['review_cell_from_view']!.handler({
+      projectId: PROJECT_ID, slotId: 'hero', persona: 'evaluator', action: 'reject', feedback: 'Too long',
+    });
+    expect(postSpy).toHaveBeenCalledWith(`/projects/${PROJECT_ID}/cells/review`, {
+      slotId: 'hero', persona: 'evaluator', action: 'reject', feedback: 'Too long',
+    });
+    expect((result as { content: Array<{ text: string }> }).content[0]!.text).toContain('Rejected');
+  });
 });
 
 describe('review_cell', () => {
@@ -279,5 +336,59 @@ describe('review_cell', () => {
 
   it('is marked destructive (the human decision review mode exists for)', () => {
     expect(server.tools['review_cell']!.config.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
+  });
+});
+
+// Plan 2026-11-04 Tasks 1-2: MCP must say what the dashboard says. A version
+// approved on a legacy-blocked column was relayed as "live", and a declared
+// audience nothing declares as reachable.
+describe('blocked columns and undeclared audiences', () => {
+  const BLOCKED_MATRIX = {
+    ...MATRIX,
+    slots: [{ ...MATRIX.slots[0]!, blocked: 'variant_history' as const }, { ...MATRIX.slots[1]!, blocked: null }],
+    personas: [
+      { key: 'developer', displayName: 'Declared: Developer', description: null, share: 0, state: 'declared', declaredVisits14d: 0 },
+      { key: 'evaluator', displayName: 'Declared: Evaluator', description: null, share: 0.4, state: 'declared', declaredVisits14d: 12 },
+    ],
+    cells: [{ ...MATRIX.cells[0]!, persona: 'developer' }],
+  };
+
+  it('get_cell_matrix calls a live cell in a blocked column "approved — not showing yet" and keeps the fields', async () => {
+    vi.spyOn(client, 'get').mockResolvedValue(BLOCKED_MATRIX);
+    const result = await server.tools['get_cell_matrix']!.handler({ projectId: PROJECT_ID });
+    const text = (result as { content: Array<{ text: string }> }).content[0]!.text;
+    expect(text).toContain("Not showing yet — your code's own test still runs here");
+    expect(text).toContain('approved — not showing yet');
+    expect(text).not.toMatch(/Hero call-to-action[^·\n]*: live/);
+    const out = z.object(server.tools['get_cell_matrix']!.config.outputSchema!).parse(
+      (result as { structuredContent: unknown }).structuredContent,
+    ) as { slots: Array<{ blocked?: string | null }>; personas: Array<{ declaredVisits14d?: number | null }> };
+    expect(out.slots[0]!.blocked).toBe('variant_history');
+    expect(out.personas[0]!.declaredVisits14d).toBe(0);
+  });
+
+  it('get_cell_matrix marks a declared row nothing declares, and only that row', async () => {
+    vi.spyOn(client, 'get').mockResolvedValue(BLOCKED_MATRIX);
+    const result = await server.tools['get_cell_matrix']!.handler({ projectId: PROJECT_ID });
+    const lines = (result as { content: Array<{ text: string }> }).content[0]!.text.split('\n');
+    expect(lines.find((l) => l.includes('Developer'))).toContain('not declared yet');
+    expect(lines.find((l) => l.includes('Evaluator'))).not.toContain('not declared yet');
+  });
+
+  it('get_cell_detail never says "They see" on a blocked column', async () => {
+    vi.spyOn(client, 'get').mockResolvedValue({ ...DETAIL, blocked: 'variant_history' });
+    const result = await server.tools['get_cell_detail']!.handler({ projectId: PROJECT_ID, slotId: 'hero', persona: 'evaluator' });
+    const text = (result as { content: Array<{ text: string }> }).content[0]!.text;
+    expect(text).not.toContain('They see');
+    expect(text).toContain('not showing yet');
+  });
+
+  it('review_cell approve on a blocked column says it is not showing', async () => {
+    vi.spyOn(client, 'post').mockResolvedValue({ ok: true, status: 'live', armId: 'developer_v1', blocked: 'variant_history' });
+    const result = await server.tools['review_cell']!.handler({ projectId: PROJECT_ID, slotId: 'hero', persona: 'developer', action: 'approve' });
+    const text = (result as { content: Array<{ text: string }> }).content[0]!.text;
+    expect(text).toContain('not showing yet');
+    expect(text).not.toContain('is now live');
+    expect((result as { structuredContent: { blocked: string | null } }).structuredContent.blocked).toBe('variant_history');
   });
 });

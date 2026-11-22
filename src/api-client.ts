@@ -20,6 +20,7 @@ export class ApiClient {
   private baseUrl: string;
   private apiKey: string;
   private refreshApiKey?: () => Promise<string | null>;
+  private agentClient?: string;
 
   constructor(opts: {
     apiKey: string;
@@ -30,10 +31,13 @@ export class ApiClient {
      * null to give up and surface the original error.
      */
     refreshApiKey?: () => Promise<string | null>;
+    /** Names this client in the project's agent activity log (x-sentient-agent-client). */
+    agentClient?: string;
   }) {
     this.apiKey = opts.apiKey;
     this.baseUrl = (opts.baseUrl ?? 'https://api.sentient-ui.com').replace(/\/$/, '');
     this.refreshApiKey = opts.refreshApiKey;
+    this.agentClient = opts.agentClient;
   }
 
   async get<T = unknown>(path: string): Promise<T> {
@@ -42,6 +46,10 @@ export class ApiClient {
 
   async post<T = unknown>(path: string, body?: unknown): Promise<T> {
     return this.request<T>('POST', path, body);
+  }
+
+  async put<T = unknown>(path: string, body?: unknown): Promise<T> {
+    return this.request<T>('PUT', path, body);
   }
 
   async patch<T = unknown>(path: string, body?: unknown): Promise<T> {
@@ -61,6 +69,7 @@ export class ApiClient {
       method,
       headers: {
         authorization: `Bearer ${this.apiKey}`,
+        ...(this.agentClient ? { 'x-sentient-agent-client': this.agentClient } : {}),
         ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,

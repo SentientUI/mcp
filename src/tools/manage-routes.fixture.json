@@ -1,0 +1,604 @@
+[
+ {
+  "tool": "manage_generation",
+  "action": "generate",
+  "method": "POST",
+  "route": "cells/generate",
+  "area": "generate"
+ },
+ {
+  "tool": "manage_generation",
+  "action": "generate_all",
+  "method": "POST",
+  "route": "cells/generate-all",
+  "area": "generate"
+ },
+ {
+  "tool": "manage_generation",
+  "action": "set_auto_fill",
+  "method": "POST",
+  "route": "cells/auto-fill",
+  "area": "generate"
+ },
+ {
+  "tool": "manage_generation",
+  "action": "set_depth",
+  "method": "PATCH",
+  "route": "slots/:slotId/generation-depth",
+  "area": "generate"
+ },
+ {
+  "tool": "manage_generation",
+  "action": "suggest_regions",
+  "method": "POST",
+  "route": "slot-suggest",
+  "area": "generate"
+ },
+ {
+  "tool": "manage_generation",
+  "action": "prepare_campaign",
+  "method": "POST",
+  "route": "campaigns/:campaignId/prepare",
+  "area": "generate"
+ },
+ {
+  "tool": "manage_generation",
+  "action": "prepare_campaigns",
+  "method": "POST",
+  "route": "campaigns/prepare",
+  "area": "generate"
+ },
+ {
+  "tool": "manage_generation",
+  "action": "open_pr",
+  "method": "POST",
+  "route": "pr-jobs",
+  "area": "generate"
+ },
+ {
+  "tool": "manage_generation",
+  "action": "instantiate_arrangement",
+  "method": "POST",
+  "route": "composition-arrangements/:arrangementId/instantiate",
+  "area": "generate"
+ },
+ {
+  "tool": "manage_generation",
+  "action": "update_region",
+  "method": "PUT",
+  "route": "slot-definitions/:slotId",
+  "area": "generate"
+ },
+ {
+  "tool": "manage_generation",
+  "action": "set_written_version_text",
+  "method": "PUT",
+  "route": "slot-definitions/:slotId/authored-arms/:armKey",
+  "area": "generate"
+ },
+ {
+  "tool": "manage_generation",
+  "action": "set_original_text",
+  "method": "PUT",
+  "route": "slot-definitions/:slotId/baseline-text",
+  "area": "generate"
+ },
+ {
+  "tool": "manage_approvals",
+  "action": "review",
+  "method": "POST",
+  "route": "cells/review",
+  "area": "approve"
+ },
+ {
+  "tool": "manage_approvals",
+  "action": "set_require_approval",
+  "method": "POST",
+  "route": "cells/review-mode",
+  "area": "approve"
+ },
+ {
+  "tool": "manage_approvals",
+  "action": "publish_region",
+  "method": "POST",
+  "route": "slot-definitions/:slotId/publish",
+  "area": "approve"
+ },
+ {
+  "tool": "manage_approvals",
+  "action": "rollback_region",
+  "method": "POST",
+  "route": "slot-definitions/:slotId/rollback",
+  "area": "approve"
+ },
+ {
+  "tool": "manage_approvals",
+  "action": "pin",
+  "method": "POST",
+  "route": "slot-definitions/:slotId/pin",
+  "area": "approve"
+ },
+ {
+  "tool": "manage_approvals",
+  "action": "keep_winner",
+  "method": "POST",
+  "route": "tests/:testId/keep",
+  "area": "approve"
+ },
+ {
+  "tool": "manage_approvals",
+  "action": "promote_variant",
+  "method": "POST",
+  "route": "components/:componentId/promote",
+  "area": "approve"
+ },
+ {
+  "tool": "manage_approvals",
+  "action": "unpromote_variant",
+  "method": "DELETE",
+  "route": "components/:componentId/promote",
+  "area": "approve"
+ },
+ {
+  "tool": "manage_tests",
+  "action": "archive_component",
+  "method": "POST",
+  "route": "components/:componentId/archive",
+  "area": "tests"
+ },
+ {
+  "tool": "manage_tests",
+  "action": "unarchive_component",
+  "method": "POST",
+  "route": "components/:componentId/unarchive",
+  "area": "tests"
+ },
+ {
+  "tool": "manage_tests",
+  "action": "migrate_component",
+  "method": "POST",
+  "route": "components/:componentId/migrate",
+  "area": "tests"
+ },
+ {
+  "tool": "manage_tests",
+  "action": "archive_region",
+  "method": "POST",
+  "route": "slot-definitions/:slotId/archive",
+  "area": "tests"
+ },
+ {
+  "tool": "manage_tests",
+  "action": "unarchive_region",
+  "method": "POST",
+  "route": "slot-definitions/:slotId/unarchive",
+  "area": "tests"
+ },
+ {
+  "tool": "manage_tests",
+  "action": "resume_region_version",
+  "method": "POST",
+  "route": "slot-definitions/:slotId/arms/:armId/resume",
+  "area": "tests"
+ },
+ {
+  "tool": "manage_tests",
+  "action": "unpause_guardrail",
+  "method": "POST",
+  "route": "guardrails/:componentId/unpause",
+  "area": "tests"
+ },
+ {
+  "tool": "manage_tests",
+  "action": "set_proof_window",
+  "method": "POST",
+  "route": "proof-window",
+  "area": "tests"
+ },
+ {
+  "tool": "manage_tests",
+  "action": "set_observation_mode",
+  "method": "PATCH",
+  "route": "observation-mode",
+  "area": "tests"
+ },
+ {
+  "tool": "manage_tests",
+  "action": "restrict_versions",
+  "method": "PUT",
+  "route": "variants/contexts",
+  "area": "tests"
+ },
+ {
+  "tool": "manage_tests",
+  "action": "propose_test",
+  "method": "POST",
+  "route": "tests",
+  "area": "tests"
+ },
+ {
+  "tool": "manage_tests",
+  "action": "start_test",
+  "method": "POST",
+  "route": "tests/:testId/start",
+  "area": "tests"
+ },
+ {
+  "tool": "manage_tests",
+  "action": "stop_test",
+  "method": "POST",
+  "route": "tests/:testId/stop",
+  "area": "tests"
+ },
+ {
+  "tool": "manage_tests",
+  "action": "skip_test",
+  "method": "POST",
+  "route": "tests/:testId/skip",
+  "area": "tests"
+ },
+ {
+  "tool": "manage_tests",
+  "action": "decline_winner",
+  "method": "POST",
+  "route": "tests/:testId/decline",
+  "area": "tests"
+ },
+ {
+  "tool": "manage_goals",
+  "action": "update_goal",
+  "method": "PUT",
+  "route": "goal-definitions/:goalId",
+  "area": "goals"
+ },
+ {
+  "tool": "manage_goals",
+  "action": "publish_goal",
+  "method": "POST",
+  "route": "goal-definitions/:goalId/publish",
+  "area": "goals"
+ },
+ {
+  "tool": "manage_goals",
+  "action": "archive_goal",
+  "method": "POST",
+  "route": "goal-definitions/:goalId/archive",
+  "area": "goals"
+ },
+ {
+  "tool": "manage_goals",
+  "action": "unarchive_goal",
+  "method": "POST",
+  "route": "goal-definitions/:goalId/unarchive",
+  "area": "goals"
+ },
+ {
+  "tool": "manage_goals",
+  "action": "set_goal_role",
+  "method": "POST",
+  "route": "goal-definitions/:goalId/role",
+  "area": "goals"
+ },
+ {
+  "tool": "manage_goals",
+  "action": "confirm_discovered_goal",
+  "method": "POST",
+  "route": "discovered-goals/:goalId/confirm",
+  "area": "goals"
+ },
+ {
+  "tool": "manage_goals",
+  "action": "dismiss_discovered_goal",
+  "method": "POST",
+  "route": "discovered-goals/:goalId/dismiss",
+  "area": "goals"
+ },
+ {
+  "tool": "manage_goals",
+  "action": "alias_goal_warning",
+  "method": "POST",
+  "route": "goal-warnings/:goalName/alias",
+  "area": "goals"
+ },
+ {
+  "tool": "manage_goals",
+  "action": "dismiss_goal_warning",
+  "method": "POST",
+  "route": "goal-warnings/:goalName/dismiss",
+  "area": "goals"
+ },
+ {
+  "tool": "manage_goals",
+  "action": "update_funnel",
+  "method": "PUT",
+  "route": "funnels/:funnelId",
+  "area": "goals"
+ },
+ {
+  "tool": "manage_goals",
+  "action": "archive_funnel",
+  "method": "POST",
+  "route": "funnels/:funnelId/archive",
+  "area": "goals"
+ },
+ {
+  "tool": "manage_goals",
+  "action": "unarchive_funnel",
+  "method": "POST",
+  "route": "funnels/:funnelId/unarchive",
+  "area": "goals"
+ },
+ {
+  "tool": "manage_goals",
+  "action": "set_main_funnel",
+  "method": "PUT",
+  "route": "main-funnel",
+  "area": "goals"
+ },
+ {
+  "tool": "manage_goals",
+  "action": "set_page_groups",
+  "method": "PUT",
+  "route": "page-groups",
+  "area": "goals"
+ },
+ {
+  "tool": "manage_campaigns",
+  "action": "create_campaign",
+  "method": "POST",
+  "route": "campaigns",
+  "area": "campaigns"
+ },
+ {
+  "tool": "manage_campaigns",
+  "action": "update_campaign",
+  "method": "PATCH",
+  "route": "campaigns/:campaignId",
+  "area": "campaigns"
+ },
+ {
+  "tool": "manage_campaigns",
+  "action": "set_campaign_tags",
+  "method": "PUT",
+  "route": "campaigns",
+  "area": "campaigns"
+ },
+ {
+  "tool": "manage_campaigns",
+  "action": "retarget",
+  "method": "POST",
+  "route": "campaigns/:campaignId/retarget",
+  "area": "campaigns"
+ },
+ {
+  "tool": "manage_campaigns",
+  "action": "update_retargeting",
+  "method": "PATCH",
+  "route": "retargeting/:groupId",
+  "area": "campaigns"
+ },
+ {
+  "tool": "manage_campaigns",
+  "action": "declare_audiences",
+  "method": "POST",
+  "route": "personas",
+  "area": "campaigns"
+ },
+ {
+  "tool": "manage_campaigns",
+  "action": "update_audience",
+  "method": "PATCH",
+  "route": "personas/:key",
+  "area": "campaigns"
+ },
+ {
+  "tool": "manage_campaigns",
+  "action": "promote_audiences",
+  "method": "POST",
+  "route": "personas/promote",
+  "area": "campaigns"
+ },
+ {
+  "tool": "manage_campaigns",
+  "action": "rollback_audiences",
+  "method": "POST",
+  "route": "personas/rollback",
+  "area": "campaigns"
+ },
+ {
+  "tool": "manage_campaigns",
+  "action": "promote_labels",
+  "method": "POST",
+  "route": "labels-promotion",
+  "area": "campaigns"
+ },
+ {
+  "tool": "manage_campaigns",
+  "action": "set_stage_settings",
+  "method": "PUT",
+  "route": "stage-settings",
+  "area": "campaigns"
+ },
+ {
+  "tool": "manage_campaigns",
+  "action": "set_search_categories",
+  "method": "PUT",
+  "route": "search-categories",
+  "area": "campaigns"
+ },
+ {
+  "tool": "manage_campaigns",
+  "action": "set_stage_serving",
+  "method": "POST",
+  "route": "stage-serving",
+  "area": "campaigns"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "update_project",
+  "method": "PATCH",
+  "route": "",
+  "area": "settings"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "remove_origin",
+  "method": "DELETE",
+  "route": "origins",
+  "area": "settings"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "add_webhook",
+  "method": "POST",
+  "route": "webhooks",
+  "area": "settings"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "remove_webhook",
+  "method": "DELETE",
+  "route": "webhooks/:webhookId",
+  "area": "settings"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "test_webhook",
+  "method": "POST",
+  "route": "webhooks/:webhookId/test",
+  "area": "settings"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "remove_style",
+  "method": "DELETE",
+  "route": "style-vocabulary/:entryId",
+  "area": "settings"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "rescan_site",
+  "method": "POST",
+  "route": "site-audit/refresh",
+  "area": "settings"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "set_page_semantics",
+  "method": "PATCH",
+  "route": "page-semantics",
+  "area": "settings"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "create_report_share",
+  "method": "POST",
+  "route": "report-shares",
+  "area": "settings"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "remove_report_share",
+  "method": "DELETE",
+  "route": "report-shares/:shareId",
+  "area": "settings"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "refresh_report_share",
+  "method": "POST",
+  "route": "report-shares/:shareId/refresh",
+  "area": "settings"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "set_previews",
+  "method": "PUT",
+  "route": "previews",
+  "area": "settings"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "set_layout_model",
+  "method": "POST",
+  "route": "layout-model",
+  "area": "settings"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "set_slot_model",
+  "method": "POST",
+  "route": "slot-model",
+  "area": "settings"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "send_test_event",
+  "method": "POST",
+  "route": "verification/test-event",
+  "area": "settings"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "accept_insight",
+  "method": "POST",
+  "route": "structured-insights/:insightId/accept",
+  "area": "read"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "dismiss_insight",
+  "method": "POST",
+  "route": "structured-insights/:insightId/dismiss",
+  "area": "read"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "save_insight",
+  "method": "POST",
+  "route": "structured-insights/:insightId/save",
+  "area": "read"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "set_gate_settings",
+  "method": "PUT",
+  "route": "gate-settings",
+  "area": "settings"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "import_known_people",
+  "method": "POST",
+  "route": "known-people/import",
+  "area": "settings"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "set_internal_sites",
+  "method": "PUT",
+  "route": "internal-traffic/origins",
+  "area": "settings"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "add_internal_email",
+  "method": "POST",
+  "route": "internal-traffic/emails",
+  "area": "settings"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "remove_internal_email",
+  "method": "DELETE",
+  "route": "internal-traffic/emails",
+  "area": "settings"
+ },
+ {
+  "tool": "manage_settings",
+  "action": "set_site_areas",
+  "method": "PUT",
+  "route": "site-areas",
+  "area": "settings"
+ }
+]

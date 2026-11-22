@@ -302,7 +302,8 @@ export function registerGoalTools(server: McpServer, client: ApiClient): void {
         'Create a NEW goal (conversion signal) for a project. Create-only: it never changes an existing goal — an id ' +
         'that already exists, including an archived one, is refused (goal_exists); call list_goals first. It never sets ' +
         "or changes the PRIMARY goal (what experiments optimize): the goal is created as 'secondary' (default) or " +
-        "'guardrail'; choosing the primary stays a dashboard decision. A guardrail goal can pause variants that hurt it — " +
+        "'guardrail'. To make it the main goal, call manage_goals set_goal_role with body { role: 'primary' } — confirm with the user " +
+        'first: it changes what every test and the headline count. A guardrail goal can pause variants that hurt it — ' +
         'say so when proposing one. Event types: url_reached (needs urlPattern, e.g. /thank-you), click / form_submit ' +
         '(need a locator, usually easier to pick in the dashboard on-site editor, or fire from code with ' +
         "client.goal('<goalId>') instead), scroll_depth (needs threshold in (0, 1]). Needs an editor/admin login or the " +

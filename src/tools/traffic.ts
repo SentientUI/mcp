@@ -44,9 +44,10 @@ export function registerTrafficTools(server: McpServer, client: ApiClient): void
     {
       title: 'Traffic breakdown',
       description:
-        'Where a project’s traffic came from. Every visitor (one per browser or device) last seen in the window falls into exactly one of seven groups that add up to the total: ' +
+        'Where a project’s traffic came from. Every visitor (one per browser or device) last seen in the window falls into exactly one group, and the groups add up to the total: ' +
         'People (ran the page, interacted (click, scroll, mouse, touch or key) and passed the bot check), Loaded but didn’t interact, Not verified — no browser activity, ' +
-        'Being analysed (usually settled within 3 hours), AI assistants, Search & AI crawlers and Other automated. ' +
+        'Being analysed (usually settled within 3 hours), AI assistants, Search & AI crawlers, Other automated, and Your team / test sites ' +
+        '(visits the project marked internal — never People, never counted, never learned from; see get_internal_traffic_rules). ' +
         'Each group carries plain-English evidence counts; named AI assistants and crawlers, conversions (total and from People) and notices are included. ' +
         'Conversion rates elsewhere are conversion rate among People. Reporting only — it does not change what the optimizer learns from.' + UNTRUSTED_FIELDS_NOTE,
       inputSchema: { projectId: projectIdSchema, range: trafficRangeSchema },
@@ -57,7 +58,7 @@ export function registerTrafficTools(server: McpServer, client: ApiClient): void
           z.object({
             group: z
               .string()
-              .describe('people | loaded_no_interaction | not_verified | being_analysed | ai_assistant | crawler | other_automated'),
+              .describe('people | loaded_no_interaction | not_verified | being_analysed | ai_assistant | crawler | other_automated | internal'),
             label: z.string(),
             count: z.number(),
             evidence: z.array(z.object({ code: z.string(), label: z.string(), count: z.number() })),
@@ -81,6 +82,12 @@ export function registerTrafficTools(server: McpServer, client: ApiClient): void
         `Traffic from ${t.window.from.slice(0, 10)} to ${t.window.to.slice(0, 10)}: ${t.total} visitors.`,
         ...t.groups.map((g) => `- ${g.label}: ${g.count}`),
       ];
+      // The slice the project set up itself: say where it comes from, or an
+      // agent asked "why did People drop?" has no way to connect the two.
+      const internal = t.groups.find((g) => g.group === 'internal')?.count ?? 0;
+      if (internal > 0) {
+        lines.push('', `${internal} visitors were marked internal by the project's own rules (your team / test sites) — not in People and not learned from. get_internal_traffic_rules shows which rules.`);
+      }
       if (beingAnalysed > 0) {
         lines.push('', `${beingAnalysed} visitors are being analysed — usually settled within 3 hours`);
       }

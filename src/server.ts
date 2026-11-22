@@ -15,6 +15,12 @@ import { registerComponentTools } from './tools/components.js';
 import { registerInsightTools } from './tools/insights.js';
 import { registerPersonaTools } from './tools/personas.js';
 import { registerStageTools } from './tools/stages.js';
+import { registerKnownPeopleTools } from './tools/known-people.js';
+import { registerMainFunnelTools } from './tools/main-funnel.js';
+import { registerPageGroupTools } from './tools/page-groups.js';
+import { registerTestTools } from './tools/tests.js';
+import { registerPageElementTools } from './tools/page-elements.js';
+import { registerNeedsYouTools } from './tools/needs-you.js';
 import { registerGoalTools } from './tools/goals.js';
 import { registerFunnelTools } from './tools/funnels.js';
 import { registerGuardrailTools } from './tools/guardrails.js';
@@ -25,8 +31,13 @@ import { registerTestBriefTools } from './tools/test-brief.js';
 import { registerIntegrationGuideTools } from './tools/integration-guide.js';
 import { registerAgentTrafficTools } from './tools/agent-traffic.js';
 import { registerTrafficTools } from './tools/traffic.js';
+import { registerInternalTrafficTools } from './tools/internal-traffic.js';
+import { registerSiteAreasTools } from './tools/site-areas.js';
 import { registerCellTools } from './tools/cells.js';
+import { registerAgentReadTools } from './tools/agent-reads.js';
+import { registerManageTools } from './tools/manage.js';
 import { registerUiResources, RESOURCE_MIME_TYPE } from './ui/index.js';
+import { SERVER_INSTRUCTIONS } from './instructions.js';
 
 export function createMcpServer(client: ApiClient): McpServer {
   const server = new McpServer(
@@ -46,6 +57,10 @@ export function createMcpServer(client: ApiClient): McpServer {
           },
         },
       },
+      // Sent in the initialize result: the facts an agent otherwise gets
+      // wrong (which audiences serve, clusters are not personas, hybrids need
+      // Migrate, the server goal call shape). See instructions.ts.
+      instructions: SERVER_INSTRUCTIONS,
     },
   );
 
@@ -57,6 +72,12 @@ export function createMcpServer(client: ApiClient): McpServer {
   registerInsightTools(server, client);
   registerPersonaTools(server, client);
   registerStageTools(server, client);
+  registerKnownPeopleTools(server, client);
+  registerMainFunnelTools(server, client);
+  registerPageGroupTools(server, client);
+  registerTestTools(server, client);
+  registerPageElementTools(server, client);
+  registerNeedsYouTools(server, client);
   registerGoalTools(server, client);
   registerFunnelTools(server, client);
   registerGuardrailTools(server, client);
@@ -67,7 +88,11 @@ export function createMcpServer(client: ApiClient): McpServer {
   registerIntegrationGuideTools(server);
   registerAgentTrafficTools(server, client);
   registerTrafficTools(server, client);
+  registerInternalTrafficTools(server, client);
+  registerSiteAreasTools(server, client);
   registerCellTools(server, client);
+  registerAgentReadTools(server, client);
+  registerManageTools(server, client);
 
   return server;
 }

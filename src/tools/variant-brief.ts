@@ -10,6 +10,7 @@ import {
   untrusted,
   UNTRUSTED_FIELDS_NOTE,
 } from './common.js';
+import { behaviourGroupName } from './personas.js';
 import {
   EVIDENCE_LABEL,
   MIN_EVIDENCE_SAMPLE,
@@ -327,11 +328,14 @@ export function registerVariantBriefTools(server: McpServer, client: ApiClient):
       }
 
       if (clusters.length) {
-        lines.push(`Audience (${totalSessions} sessions):`);
+        // Behaviour groups, not audiences: the cluster label was the declared
+        // persona key the refit wrote, and this brief listed it as the
+        // component's "Audience" — a role for visitors who only behaved alike.
+        // Named neutrally (behaviourGroupName), never from the stored label.
+        lines.push(`Behaviour groups (visitors who behaved alike — not audiences; ${totalSessions} sessions):`);
         for (const c of clusters) {
           const share = totalSessions > 0 ? ((c.sessionCount / totalSessions) * 100).toFixed(0) : '0';
-          // Persona labels derive from visitor behaviour — same delimiting.
-          lines.push(`- ${untrusted(c.label)}: ${share}% of traffic, ${c.sessionCount} sessions (reliability ${(c.avgReliability * 100).toFixed(0)}%)`);
+          lines.push(`- ${behaviourGroupName(c.label)}: ${share}% of traffic, ${c.sessionCount} sessions (reliability ${(c.avgReliability * 100).toFixed(0)}%)`);
         }
         lines.push('');
       }

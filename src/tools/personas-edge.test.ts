@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { ToolHandler } from './test-utils.js';
 import { ApiClient } from '../api-client.js';
-import { registerPersonaTools } from './personas.js';
+import { behaviourGroupName, registerPersonaTools } from './personas.js';
 
 function makeServer() {
   const tools: Record<string, { handler: ToolHandler }> = {};
@@ -20,53 +20,50 @@ async function run(data: unknown) {
   return result.content[0].text as string;
 }
 
-describe('get_persona_breakdown — percentage math', () => {
-  it('computes sessionCount/totalSessions*100 to 1 decimal and reliability to 0 decimals', async () => {
-    // 75/200 = 37.5%, reliability 0.66 -> 66%
-    const text = await run({
-      clusters: [{ label: 'guests', sessionCount: 75, avgReliability: 0.66 }],
-      totalSessions: 200,
-    });
-    expect(text).toContain('Total sessions: 200');
-    expect(text).toContain('- `guests`: 75 sessions (37.5% of traffic, reliability 66%)');
+const BREAKDOWN = {
+  windowDays: 30,
+  totalPeople: 400,
+  personas: [
+    { key: 'unknown', name: 'Everyone', kind: 'everyone', people: 400, sharePct: 100 },
+    { key: 'developer', name: 'Declared: Developer', kind: 'declared', people: 0, sharePct: 0 },
+  ],
+  behaviourGroups: [{ name: 'Behaviour group 1', description: 'Ready to act quickly.', people: 410 }],
+};
+
+describe('get_persona_breakdown — served-as audiences, behaviour groups apart', () => {
+  // The bug: a behaviour cluster labelled `developer` reached agents as
+  // "Developer: 410 visitors" while the Matrix showed 0% for Developer.
+  it('reports the served-as counts (the Matrix share) and never names a group after an audience', async () => {
+    const text = await run(BREAKDOWN);
+    expect(text).toContain('same numbers as the Matrix share');
+    expect(text).toContain('- `Everyone`: 400 people (100.0%)');
+    expect(text).toContain('- `Declared: Developer`: 0 people (0.0%)');
+    expect(text).toContain('Behaviour groups (visitors who behaved alike — NOT audiences');
+    expect(text).toContain('- Behaviour group 1: 410 people — Ready to act quickly.');
   });
 
-  it('renders each cluster on its own line', async () => {
-    const text = await run({
-      clusters: [
-        { label: 'admins', sessionCount: 100, avgReliability: 0.9 },
-        { label: 'lurkers', sessionCount: 300, avgReliability: 0.5 },
-      ],
-      totalSessions: 400,
-    });
-    expect(text).toContain('- `admins`: 100 sessions (25.0% of traffic, reliability 90%)');
-    expect(text).toContain('- `lurkers`: 300 sessions (75.0% of traffic, reliability 50%)');
+  it('says so when nothing was served in the window', async () => {
+    const text = await run({ ...BREAKDOWN, totalPeople: 0, personas: [], behaviourGroups: [] });
+    expect(text).toContain('No served decisions yet');
+    expect(text).toContain('- None yet.');
+    expect(text).not.toContain('NaN');
   });
 
-  it('shows empty-state message when there are no clusters', async () => {
-    const text = await run({ clusters: [], totalSessions: 0 });
-    expect(text).toContain('No persona clusters yet');
+  it('reads the persona-breakdown endpoint, not /portraits', async () => {
+    const client = new ApiClient({ apiKey: 'sk_test' });
+    const get = vi.spyOn(client, 'get').mockResolvedValue(BREAKDOWN as any);
+    const server = makeServer();
+    registerPersonaTools(server as any, client);
+    await server.tools['get_persona_breakdown']!.handler({ projectId: 'p1' });
+    expect(get).toHaveBeenCalledWith('/projects/p1/persona-breakdown');
   });
 });
 
-describe('get_persona_breakdown — totalSessions === 0 (divide-by-zero guard)', () => {
-  it('renders 0.0% (not Infinity) for a positive sessionCount when totalSessions is 0', async () => {
-    // Guard in personas.ts: totalSessions > 0 ? (count/total)*100 : 0.
-    const text = await run({
-      clusters: [{ label: 'ghost', sessionCount: 5, avgReliability: 0.4 }],
-      totalSessions: 0,
-    });
-    expect(text).toContain('- `ghost`: 5 sessions (0.0% of traffic, reliability 40%)');
-    expect(text).toContain('Total sessions: 0');
-    expect(text).not.toContain('Infinity');
-  });
-
-  it('renders 0.0% (not NaN) when both sessionCount and totalSessions are 0', async () => {
-    const text = await run({
-      clusters: [{ label: 'ghost', sessionCount: 0, avgReliability: 0.4 }],
-      totalSessions: 0,
-    });
-    expect(text).toContain('- `ghost`: 0 sessions (0.0% of traffic, reliability 40%)');
-    expect(text).not.toContain('NaN');
+describe('behaviourGroupName', () => {
+  it('names neutral labels by number and never echoes any other stored label', () => {
+    expect(behaviourGroupName('behaviour-3')).toBe('Behaviour group 3');
+    expect(behaviourGroupName('developer')).toBe('Behaviour group');
+    expect(behaviourGroupName('unclustered')).toBe('Not grouped yet');
+    expect(behaviourGroupName(null)).toBe('Not grouped yet');
   });
 });

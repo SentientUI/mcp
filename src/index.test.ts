@@ -89,7 +89,7 @@ describe('SENTIENTUI_API_KEY resolution', () => {
 
     expect(mocks.resolveDemoToken).not.toHaveBeenCalled();
     expect(mocks.ApiClient).toHaveBeenCalledWith(
-      expect.objectContaining({ apiKey: 'sk_live_abc', refreshApiKey: undefined }),
+      expect.objectContaining({ apiKey: 'sk_live_abc', refreshApiKey: undefined, agentClient: 'stdio MCP' }),
     );
     expect(exitSpy).not.toHaveBeenCalled();
   });

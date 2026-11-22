@@ -273,10 +273,17 @@ describe('get_variant_brief — formatting', () => {
     expect(text).toContain("baseline `bold` — no arm is named 'control'");
   });
 
-  it('formats audience share with its session count', async () => {
-    const text = await run(baseResponses);
-    expect(text).toContain('Audience (300 sessions):');
-    expect(text).toContain('- `admins`: 50% of traffic, 150 sessions (reliability 80%)');
+  // The refit labelled behaviour clusters with declared persona keys, and
+  // this brief listed them as the component's "Audience".
+  it('lists portrait clusters as behaviour groups, never under a persona name', async () => {
+    const text = await run({
+      ...baseResponses,
+      portraits: { clusters: [...(baseResponses.portraits.clusters), { label: 'behaviour-2', sessionCount: 30, avgReliability: 0.5 }], totalSessions: 300 },
+    });
+    expect(text).toContain('Behaviour groups (visitors who behaved alike — not audiences; 300 sessions):');
+    expect(text).toContain('- Behaviour group: 50% of traffic, 150 sessions (reliability 80%)');
+    expect(text).toContain('- Behaviour group 2: 10% of traffic, 30 sessions (reliability 50%)');
+    expect(text).not.toContain('admins');
   });
 
   it('uses ecommerce best-practice priors keyed by context_type', async () => {
@@ -324,7 +331,7 @@ describe('get_variant_brief — partial API failures (settled)', () => {
 
   it('still produces a brief when /portraits rejects', async () => {
     const text = await run({ ...baseResponses, portraits: new Error('boom') });
-    expect(text).not.toContain('Audience (');
+    expect(text).not.toContain('Behaviour groups (');
     expect(text).toContain('## Evidence state: DIRECTIONAL');
   });
 });

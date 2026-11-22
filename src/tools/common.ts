@@ -196,6 +196,18 @@ export function apiErrorGuidance(err: ApiError, extra?: ExtraGuidance): string |
     case 'role_required':
     case 'not_authorized':
       return `Your role on this project cannot make this change — it needs an editor or admin.${detailSuffix(err)}`;
+    // A person's switch, not a fault: the server sentence names the area and
+    // where to flip it. Without this the agent got generic "check your key"
+    // advice and retried or re-authenticated against a deliberate refusal.
+    // The three codes mean different things, so one shared "a person has not
+    // allowed this" prefix told the agent to ask the user to flip a switch for
+    // actions no switch covers.
+    case 'agent_access_off':
+      return `A person has not allowed this action for agents.${detailSuffix(err)} Do not retry; tell the user what is blocked.`;
+    case 'agent_access_unmapped':
+      return `This action is not available to agents yet; no Agent access switch turns it on.${detailSuffix(err)} Do not retry; tell the user to make this change in the dashboard.`;
+    case 'agent_access_person_only':
+      return `Only a person can make this change.${detailSuffix(err)} Do not retry; tell the user to make it in the dashboard.`;
     case 'ai_unavailable':
       return 'AI generation is unavailable on the SentientUI server right now (no model is configured). Nothing was queued — retry later.';
     default:
